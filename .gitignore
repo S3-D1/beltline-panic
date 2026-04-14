@@ -137,3 +137,10 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Beltline Panic — project-specific exclusions
+dist/
+.DS_Store
+.vscode/
+.env.local
+.env.*.local
