@@ -110,7 +110,7 @@ Additional documentation is provided within [/docs](./docs):
 
 ## Roadmap
 
-- [ ] Project Structure & CI
+- [x] Project Structure & CI
 - [ ] Core concept
 - [ ] Core conveyor prototype
 - [ ] Item processing states

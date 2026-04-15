@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "moduleResolution": "node"
+  },
+  "include": ["src/tests", "src/utils/math.test.ts"],
+  "exclude": []
+}
