@@ -1,9 +1,15 @@
 import Phaser from 'phaser';
 import { InputSystem, LAYOUT } from '../systems/InputSystem';
+import { ConveyorSystem } from '../systems/ConveyorSystem';
+import { ItemSystem } from '../systems/ItemSystem';
+import { ITEM_COLORS, INLET_START, INLET_END, ITEM_SIZE } from '../data/ConveyorConfig';
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
   private playerGraphic!: Phaser.GameObjects.Graphics;
+  private conveyorSystem!: ConveyorSystem;
+  private itemSystem!: ItemSystem;
+  private itemGraphics!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -12,11 +18,16 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.drawLayout();
     this.inputSystem = new InputSystem(this);
+    this.conveyorSystem = new ConveyorSystem();
+    this.itemSystem = new ItemSystem(this.conveyorSystem);
+    this.itemGraphics = this.add.graphics();
     this.playerGraphic = this.add.graphics();
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
     this.inputSystem.update();
+    this.itemSystem.update(delta);
+    this.renderItems();
     const { x, y } = this.inputSystem.getPlayerCoords();
     this.playerGraphic.clear();
     this.playerGraphic.fillStyle(0xff0000, 1);
@@ -29,6 +40,10 @@ export class GameScene extends Phaser.Scene {
     // ConveyorBelt — dark unfilled rectangular loop
     g.lineStyle(LAYOUT.BELT_THICKNESS, 0x333333, 1);
     g.strokeRect(LAYOUT.BELT_X, LAYOUT.BELT_Y, LAYOUT.BELT_W, LAYOUT.BELT_H);
+
+    // Inlet line — horizontal segment feeding into the belt loop
+    g.lineStyle(LAYOUT.BELT_THICKNESS, 0x333333, 1);
+    g.lineBetween(INLET_START.x, INLET_START.y, INLET_END.x, INLET_END.y);
 
     // Station blocks (blue) — top, right, bottom, left
     g.fillStyle(0x4488ff, 1);
@@ -61,13 +76,6 @@ export class GameScene extends Phaser.Scene {
       LAYOUT.STATION_W,
     );
 
-    // Items — small purple rectangles on the belt path
-    g.fillStyle(0x9944cc, 1);
-    // Item on top edge of belt
-    g.fillRect(LAYOUT.BELT_X + 80, LAYOUT.BELT_Y + 2, 16, 12);
-    // Item on right edge of belt
-    g.fillRect(LAYOUT.BELT_X + LAYOUT.BELT_W - LAYOUT.BELT_THICKNESS + 2, LAYOUT.BELT_Y + 100, 12, 16);
-
     // MovementArea — lightly tinted cross
     const ma = this.add.graphics();
     ma.fillStyle(0xffffff, 0.08);
@@ -83,5 +91,19 @@ export class GameScene extends Phaser.Scene {
     ma.fillRect(LAYOUT.CENTER_X - off - ns / 2, LAYOUT.CENTER_Y - ns / 2, ns, ns);
     // Right node
     ma.fillRect(LAYOUT.CENTER_X + off - ns / 2, LAYOUT.CENTER_Y - ns / 2, ns, ns);
+  }
+
+  private renderItems(): void {
+    this.itemGraphics.clear();
+    const items = this.itemSystem.getItems();
+    for (const item of items) {
+      this.itemGraphics.fillStyle(ITEM_COLORS[item.state], 1);
+      this.itemGraphics.fillRect(
+        item.x - ITEM_SIZE / 2,
+        item.y - ITEM_SIZE / 2,
+        ITEM_SIZE,
+        ITEM_SIZE,
+      );
+    }
   }
 }
