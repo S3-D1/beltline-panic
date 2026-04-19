@@ -97,21 +97,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: gh-pages
-          path: gh-pages
 
-      - name: Remove preview directory
-        run: rm -rf "gh-pages/${{ env.PREVIEW_DIR }}"
-
-      - name: Add .nojekyll
-        run: touch gh-pages/.nojekyll
-
-      - name: Commit preview cleanup
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: gh-pages
-          folder: gh-pages
-          clean: false
-          single-commit: false
+      - name: Remove preview directory and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf "${{ env.PREVIEW_DIR }}"
+          touch .nojekyll
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: remove preview for PR #${{ github.event.pull_request.number }}"
+          git push
 
       - name: Update PR comment
         uses: actions/github-script@v7
