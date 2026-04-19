@@ -49,3 +49,19 @@ export const TRANSITION_ZONES: TransitionZone[] = [
   { progressStart: 0.35, progressEnd: 0.43, fromState: 'processed', toState: 'upgraded'  }, // Machine_2 (right edge)
   { progressStart: 0.60, progressEnd: 0.68, fromState: 'upgraded',  toState: 'packaged'  }, // Machine_3 (bottom edge)
 ];
+
+// --- Outlet geometry ---
+export const OUTLET_BRANCH_PROGRESS = 0.893;
+export const OUTLET_START: Point = { x: LAYOUT.BELT_X, y: LAYOUT.CENTER_Y };
+export const OUTLET_END: Point   = { x: LAYOUT.BELT_X - 80, y: LAYOUT.CENTER_Y };
+
+// --- Item values ---
+export const ITEM_VALUES: Record<ItemState, number> = {
+  new:       0,
+  processed: 10,
+  upgraded:  11,  // 10 * 1.1
+  packaged:  22,  // 10 * 1.1 * 2
+};
+
+// --- Collision ---
+export const COLLISION_THRESHOLD = ITEM_SIZE; // distance in pixels
