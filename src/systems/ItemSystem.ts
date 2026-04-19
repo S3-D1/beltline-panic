@@ -1,6 +1,5 @@
 import {
   SPAWN_INTERVAL,
-  TRANSITION_ZONES,
   INLET_START,
   ITEM_VALUES,
   COLLISION_THRESHOLD,
@@ -38,22 +37,7 @@ export class ItemSystem {
     // 2. Advance positions via ConveyorSystem
     this.conveyor.update(delta, this.items);
 
-    // 3. Check transition zones for loop items (skip inlet and outlet items)
-    for (const item of this.items) {
-      if (item.onInlet || item.onOutlet) continue;
-
-      for (const zone of TRANSITION_ZONES) {
-        if (
-          item.state === zone.fromState &&
-          item.loopProgress >= zone.progressStart &&
-          item.loopProgress <= zone.progressEnd
-        ) {
-          item.state = zone.toState;
-        }
-      }
-    }
-
-    // 4. Collect exited items: filter where onOutlet && outletProgress >= 1
+    // 3. Collect exited items: filter where onOutlet && outletProgress >= 1
     const exitedValues: number[] = [];
     this.items = this.items.filter((item) => {
       if (item.onOutlet && item.outletProgress >= 1) {
@@ -63,7 +47,7 @@ export class ItemSystem {
       return true;
     });
 
-    // 5. Check collisions: O(n²) pairwise distance check
+    // 4. Check collisions: O(n²) pairwise distance check
     let collision: { a: ConveyorItem; b: ConveyorItem } | null = null;
     for (let i = 0; i < this.items.length && !collision; i++) {
       for (let j = i + 1; j < this.items.length; j++) {
@@ -79,7 +63,7 @@ export class ItemSystem {
       }
     }
 
-    // 6. Return result
+    // 5. Return result
     return { exitedValues, collision };
   }
 
