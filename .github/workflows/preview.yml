@@ -5,19 +5,22 @@ on:
     types: [opened, synchronize, reopened, closed]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-  deployments: write
+  contents: write
   pull-requests: write
+
+concurrency:
+  group: preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   deploy-preview:
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'
-    environment:
-      name: preview-pr-${{ github.event.pull_request.number }}
-      url: ${{ steps.deploy.outputs.page_url }}
+
+    env:
+      PREVIEW_DIR: preview/${{ github.event.pull_request.number }}
+      PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/preview/${{ github.event.pull_request.number }}/
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,32 +34,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Build preview
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/${{ env.PREVIEW_DIR }}/
         run: npm run build
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist/
+      - name: Add .nojekyll
+        run: touch dist/.nojekyll
 
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+      - name: Deploy preview to gh-pages subdirectory
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          preview: true
+          branch: gh-pages
+          folder: dist
+          target-folder: ${{ env.PREVIEW_DIR }}
+          clean: false
+          single-commit: false
 
       - name: Post preview URL as PR comment
         uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ env.PREVIEW_URL }}
         with:
           script: |
-            const url = '${{ steps.deploy.outputs.page_url }}';
+            const url = process.env.PREVIEW_URL;
             const body = `### Preview Deployment\n\n:rocket: Preview available at: ${url}\n\n_Updated on push to \`${{ github.head_ref }}\`_`;
+
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
+
             const existing = comments.find(c => c.body.startsWith('### Preview Deployment'));
+
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -76,23 +87,51 @@ jobs:
   deactivate-preview:
     runs-on: ubuntu-latest
     if: github.event.action == 'closed'
+
+    env:
+      PREVIEW_DIR: preview/${{ github.event.pull_request.number }}
+      PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/preview/${{ github.event.pull_request.number }}/
+
     steps:
-      - name: Deactivate preview deployment
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Remove preview directory
+        run: rm -rf "gh-pages/${{ env.PREVIEW_DIR }}"
+
+      - name: Add .nojekyll
+        run: touch gh-pages/.nojekyll
+
+      - name: Commit preview cleanup
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: gh-pages
+          clean: false
+          single-commit: false
+
+      - name: Update PR comment
         uses: actions/github-script@v7
         with:
           script: |
-            const environment = `preview-pr-${{ github.event.pull_request.number }}`;
-            const { data: deployments } = await github.rest.repos.listDeployments({
+            const body = `### Preview Deployment\n\n:warning: Preview removed because this pull request was closed.\n\n_Previous URL was: ${{ env.PREVIEW_URL }}_`;
+
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              environment,
+              issue_number: context.issue.number,
             });
-            for (const deployment of deployments) {
-              await github.rest.repos.createDeploymentStatus({
+
+            const existing = comments.find(c => c.body.startsWith('### Preview Deployment'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                deployment_id: deployment.id,
-                state: 'inactive',
-                description: 'PR closed — preview deactivated',
+                comment_id: existing.id,
+                body,
               });
             }
