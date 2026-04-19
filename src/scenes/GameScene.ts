@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { InputSystem, LAYOUT } from '../systems/InputSystem';
-import { ConveyorSystem } from '../systems/ConveyorSystem';
+import { ConveyorSystem, ConveyorItem } from '../systems/ConveyorSystem';
 import { ItemSystem } from '../systems/ItemSystem';
-import { ITEM_COLORS, INLET_START, INLET_END, ITEM_SIZE } from '../data/ConveyorConfig';
+import { ITEM_COLORS, INLET_START, INLET_END, OUTLET_START, OUTLET_END, ITEM_SIZE } from '../data/ConveyorConfig';
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
@@ -10,6 +10,12 @@ export class GameScene extends Phaser.Scene {
   private conveyorSystem!: ConveyorSystem;
   private itemSystem!: ItemSystem;
   private itemGraphics!: Phaser.GameObjects.Graphics;
+  private score: number = 0;
+  private scoreText!: Phaser.GameObjects.Text;
+  private gameOver: boolean = false;
+  private gameOverText!: Phaser.GameObjects.Text;
+  private collidedItems: [ConveyorItem, ConveyorItem] | null = null;
+  private blinkTimer: number = 0;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -22,12 +28,41 @@ export class GameScene extends Phaser.Scene {
     this.itemSystem = new ItemSystem(this.conveyorSystem);
     this.itemGraphics = this.add.graphics();
     this.playerGraphic = this.add.graphics();
+
+    // Score text - top-right corner, monospace white
+    this.scoreText = this.add.text(this.scale.width - 16, 16, '00000000', {
+      fontFamily: 'monospace',
+      fontSize: '24px',
+      color: '#ffffff',
+    }).setOrigin(1, 0);
+
+    // Game over text - centered, hidden initially
+    this.gameOverText = this.add.text(this.scale.width / 2, this.scale.height / 2, 'Game Over', {
+      fontFamily: 'monospace',
+      fontSize: '48px',
+      color: '#ff0000',
+    }).setOrigin(0.5, 0.5).setVisible(false);
   }
 
   update(_time: number, delta: number): void {
-    this.inputSystem.update();
-    this.itemSystem.update(delta);
+    if (!this.gameOver) {
+      this.inputSystem.update();
+      const result = this.itemSystem.update(delta);
+
+      for (const val of result.exitedValues) {
+        this.score += val;
+      }
+      this.updateScoreDisplay();
+
+      if (result.collision) {
+        this.enterGameOver(result.collision.a, result.collision.b);
+      }
+    } else {
+      this.blinkTimer += delta;
+    }
+
     this.renderItems();
+    // Player rendering
     const { x, y } = this.inputSystem.getPlayerCoords();
     this.playerGraphic.clear();
     this.playerGraphic.fillStyle(0xff0000, 1);
@@ -44,6 +79,10 @@ export class GameScene extends Phaser.Scene {
     // Inlet line — horizontal segment feeding into the belt loop
     g.lineStyle(LAYOUT.BELT_THICKNESS, 0x333333, 1);
     g.lineBetween(INLET_START.x, INLET_START.y, INLET_END.x, INLET_END.y);
+
+    // Outlet line — horizontal segment leaving the belt loop
+    g.lineStyle(LAYOUT.BELT_THICKNESS, 0x333333, 1);
+    g.lineBetween(OUTLET_START.x, OUTLET_START.y, OUTLET_END.x, OUTLET_END.y);
 
     // Station blocks (blue) — top, right, bottom, left
     g.fillStyle(0x4488ff, 1);
@@ -93,11 +132,28 @@ export class GameScene extends Phaser.Scene {
     ma.fillRect(LAYOUT.CENTER_X + off - ns / 2, LAYOUT.CENTER_Y - ns / 2, ns, ns);
   }
 
+  private enterGameOver(a: ConveyorItem, b: ConveyorItem): void {
+    this.gameOver = true;
+    this.collidedItems = [a, b];
+    this.gameOverText.setVisible(true);
+    this.scoreText.setColor('#ff0000');
+  }
+
+  private updateScoreDisplay(): void {
+    this.scoreText.setText(String(this.score).padStart(8, '0'));
+  }
+
   private renderItems(): void {
     this.itemGraphics.clear();
     const items = this.itemSystem.getItems();
     for (const item of items) {
-      this.itemGraphics.fillStyle(ITEM_COLORS[item.state], 1);
+      let color = ITEM_COLORS[item.state];
+      if (this.gameOver && this.collidedItems) {
+        if (item === this.collidedItems[0] || item === this.collidedItems[1]) {
+          color = Math.floor(this.blinkTimer / 300) % 2 === 0 ? 0xff0000 : ITEM_COLORS[item.state];
+        }
+      }
+      this.itemGraphics.fillStyle(color, 1);
       this.itemGraphics.fillRect(
         item.x - ITEM_SIZE / 2,
         item.y - ITEM_SIZE / 2,
