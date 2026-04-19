@@ -17,8 +17,8 @@ describe('src/ subdirectories', () => {
 });
 
 describe('src/scenes/ files', () => {
-  it('src/scenes/InitialScene.ts exists', () => {
-    expect(existsSync(resolve(root, 'src/scenes/InitialScene.ts'))).toBe(true);
+  it('src/scenes/InitialScene.ts has been removed', () => {
+    expect(existsSync(resolve(root, 'src/scenes/InitialScene.ts'))).toBe(false);
   });
 });
 
