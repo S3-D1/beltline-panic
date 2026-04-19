@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
-import { InitialScene } from './scenes/InitialScene';
+import { StartScene } from './scenes/StartScene';
+import { GameScene } from './scenes/GameScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 800,
   height: 600,
   backgroundColor: '#1a1a2e',
-  scene: [InitialScene],
+  scene: [StartScene, GameScene],
 };
 
 // [YOUTUBE PLAYABLES] SDK load point — uncomment and implement when targeting Playables

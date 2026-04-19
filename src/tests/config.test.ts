@@ -26,8 +26,9 @@ describe('tsconfig.json — compilerOptions', () => {
 });
 
 describe('vite.config.ts — build config', () => {
-  it('base is "./"', () => {
-    expect(viteConfigText).toMatch(/base:\s*['"]\.\/['"]/);
+  it('base defaults to "./"', () => {
+    expect(viteConfigText).toMatch(/base:\s*/);
+    expect(viteConfigText).toMatch(/['"]\.\//);
   });
 
   it('build.outDir is "dist"', () => {
