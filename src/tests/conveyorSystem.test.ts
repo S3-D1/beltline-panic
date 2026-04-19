@@ -10,13 +10,7 @@ const LAYOUT = {
   BELT_H: 300,
 } as const;
 
-// Derived expected waypoints
-const expectedWaypoints = [
-  { x: LAYOUT.BELT_X, y: LAYOUT.BELT_Y },
-  { x: LAYOUT.BELT_X + LAYOUT.BELT_W, y: LAYOUT.BELT_Y },
-  { x: LAYOUT.BELT_X + LAYOUT.BELT_W, y: LAYOUT.BELT_Y + LAYOUT.BELT_H },
-  { x: LAYOUT.BELT_X, y: LAYOUT.BELT_Y + LAYOUT.BELT_H },
-];
+
 
 // Parse waypoints from ConveyorConfig source to avoid Phaser import chain
 function parseWaypointsFromSource(): { x: number; y: number }[] {
