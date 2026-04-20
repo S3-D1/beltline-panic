@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import type { Direction } from '../data/MachineConfig';
 
 export type PlayerPosition = 'center' | 'up' | 'down' | 'left' | 'right';
 
@@ -31,34 +31,15 @@ const OPPOSITE: Record<string, PlayerPosition> = {
 export class InputSystem {
   private position: PlayerPosition = 'center';
 
-  private keyUp: Phaser.Input.Keyboard.Key;
-  private keyW: Phaser.Input.Keyboard.Key;
-  private keyDown: Phaser.Input.Keyboard.Key;
-  private keyS: Phaser.Input.Keyboard.Key;
-  private keyLeft: Phaser.Input.Keyboard.Key;
-  private keyA: Phaser.Input.Keyboard.Key;
-  private keyRight: Phaser.Input.Keyboard.Key;
-  private keyD: Phaser.Input.Keyboard.Key;
+  constructor() {}
 
-  constructor(scene: Phaser.Scene) {
-    const kb = scene.input.keyboard!;
-    this.keyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
-    this.keyW = kb.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-    this.keyDown = kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
-    this.keyS = kb.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    this.keyLeft = kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
-    this.keyA = kb.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.keyRight = kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
-    this.keyD = kb.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-  }
-
-  update(): void {
-    const pressed = this.getPressedDirection();
-    if (!pressed) return;
+  /** Called each frame with the direction from ActionLayer (or null). */
+  update(direction: Direction | null): void {
+    if (!direction) return;
 
     if (this.position === 'center') {
-      this.position = pressed;
-    } else if (pressed === OPPOSITE[this.position]) {
+      this.position = direction;
+    } else if (direction === OPPOSITE[this.position]) {
       this.position = 'center';
     }
     // Otherwise: no-op (non-returning key from a directional position)
@@ -76,13 +57,5 @@ export class InputSystem {
       case 'left':   return { x: LAYOUT.CENTER_X - LAYOUT.NODE_OFFSET, y: LAYOUT.CENTER_Y };
       case 'right':  return { x: LAYOUT.CENTER_X + LAYOUT.NODE_OFFSET, y: LAYOUT.CENTER_Y };
     }
-  }
-
-  private getPressedDirection(): PlayerPosition | null {
-    if (Phaser.Input.Keyboard.JustDown(this.keyUp) || Phaser.Input.Keyboard.JustDown(this.keyW)) return 'up';
-    if (Phaser.Input.Keyboard.JustDown(this.keyDown) || Phaser.Input.Keyboard.JustDown(this.keyS)) return 'down';
-    if (Phaser.Input.Keyboard.JustDown(this.keyLeft) || Phaser.Input.Keyboard.JustDown(this.keyA)) return 'left';
-    if (Phaser.Input.Keyboard.JustDown(this.keyRight) || Phaser.Input.Keyboard.JustDown(this.keyD)) return 'right';
-    return null;
   }
 }
