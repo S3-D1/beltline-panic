@@ -84,3 +84,14 @@ describe('ItemSystem — transition zones', () => {
     expect(transitionZones[2].toState).toBe('packaged');
   });
 });
+
+describe('ItemSystem — source no longer applies transition zones', () => {
+  // Example 6: Verify ItemSystem.ts source does not iterate TRANSITION_ZONES to change state
+  // Validates: Requirements 11.1
+  it('ItemSystem.ts source does not reference TRANSITION_ZONES', () => {
+    const itemSystemPath = path.resolve(__dirname, '../systems/ItemSystem.ts');
+    const source = fs.readFileSync(itemSystemPath, 'utf-8');
+
+    expect(source).not.toContain('TRANSITION_ZONES');
+  });
+});

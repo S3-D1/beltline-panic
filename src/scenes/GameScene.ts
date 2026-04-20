@@ -3,6 +3,9 @@ import { InputSystem, LAYOUT } from '../systems/InputSystem';
 import { ConveyorSystem, ConveyorItem } from '../systems/ConveyorSystem';
 import { ItemSystem } from '../systems/ItemSystem';
 import { ITEM_COLORS, INLET_START, INLET_END, OUTLET_START, OUTLET_END, ITEM_SIZE } from '../data/ConveyorConfig';
+import { MachineSystem } from '../systems/MachineSystem';
+import { SequenceInputUI } from '../ui/SequenceInputUI';
+import { Direction } from '../data/MachineConfig';
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
@@ -17,6 +20,20 @@ export class GameScene extends Phaser.Scene {
   private collidedItems: [ConveyorItem, ConveyorItem] | null = null;
   private blinkTimer: number = 0;
 
+  private machineGraphics!: Phaser.GameObjects.Graphics;
+  private machineSystem!: MachineSystem;
+  private sequenceInputUI!: SequenceInputUI;
+  private interactKey!: Phaser.Input.Keyboard.Key;
+  private dirKeyUp!: Phaser.Input.Keyboard.Key;
+  private dirKeyDown!: Phaser.Input.Keyboard.Key;
+  private dirKeyLeft!: Phaser.Input.Keyboard.Key;
+  private dirKeyRight!: Phaser.Input.Keyboard.Key;
+  private dirKeyW!: Phaser.Input.Keyboard.Key;
+  private dirKeyS!: Phaser.Input.Keyboard.Key;
+  private dirKeyA!: Phaser.Input.Keyboard.Key;
+  private dirKeyD!: Phaser.Input.Keyboard.Key;
+  private prevInteractionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled' = 'idle';
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -28,6 +45,25 @@ export class GameScene extends Phaser.Scene {
     this.itemSystem = new ItemSystem(this.conveyorSystem);
     this.itemGraphics = this.add.graphics();
     this.playerGraphic = this.add.graphics();
+    this.machineGraphics = this.add.graphics();
+
+    // Machine system and UI
+    this.machineSystem = new MachineSystem();
+    this.sequenceInputUI = new SequenceInputUI(this);
+
+    // Interact key (Space)
+    this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    // Direction keys for machine interaction (separate from InputSystem's private keys)
+    const kb = this.input.keyboard!;
+    this.dirKeyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
+    this.dirKeyDown = kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
+    this.dirKeyLeft = kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
+    this.dirKeyRight = kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
+    this.dirKeyW = kb.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+    this.dirKeyS = kb.addKey(Phaser.Input.Keyboard.KeyCodes.S);
+    this.dirKeyA = kb.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    this.dirKeyD = kb.addKey(Phaser.Input.Keyboard.KeyCodes.D);
 
     // Score text - top-right corner, monospace white
     this.scoreText = this.add.text(this.scale.width - 16, 16, '00000000', {
@@ -46,7 +82,13 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.gameOver) {
-      this.inputSystem.update();
+      const interactionActive = this.machineSystem.getActiveInteraction() !== null;
+
+      // Skip player movement when machine interaction is active (input routing)
+      if (!interactionActive) {
+        this.inputSystem.update();
+      }
+
       const result = this.itemSystem.update(delta);
 
       for (const val of result.exitedValues) {
@@ -57,16 +99,72 @@ export class GameScene extends Phaser.Scene {
       if (result.collision) {
         this.enterGameOver(result.collision.a, result.collision.b);
       }
+
+      // Machine system update
+      const playerPos = this.inputSystem.getPlayerPosition();
+      const interactPressed = Phaser.Input.Keyboard.JustDown(this.interactKey);
+      const direction = this.getDirectionJustPressed();
+      const machineResult = this.machineSystem.update(
+        this.itemSystem.getItems(),
+        playerPos,
+        interactPressed,
+        direction,
+      );
+
+      // Handle returned items: MachineSystem already spliced intaken items from the array,
+      // so we just push returned items back
+      for (const item of machineResult.itemsToReturn) {
+        this.itemSystem.getItems().push(item);
+      }
+
+      // Update SequenceInputUI based on interaction state changes
+      this.updateSequenceUI(machineResult.interactionState);
     } else {
       this.blinkTimer += delta;
     }
 
+    this.renderMachines();
     this.renderItems();
     // Player rendering
     const { x, y } = this.inputSystem.getPlayerCoords();
     this.playerGraphic.clear();
     this.playerGraphic.fillStyle(0xff0000, 1);
     this.playerGraphic.fillRect(x - 20, y - 20, 40, 40);
+  }
+
+  private getDirectionJustPressed(): Direction | null {
+    if (Phaser.Input.Keyboard.JustDown(this.dirKeyUp) || Phaser.Input.Keyboard.JustDown(this.dirKeyW)) return 'up';
+    if (Phaser.Input.Keyboard.JustDown(this.dirKeyDown) || Phaser.Input.Keyboard.JustDown(this.dirKeyS)) return 'down';
+    if (Phaser.Input.Keyboard.JustDown(this.dirKeyLeft) || Phaser.Input.Keyboard.JustDown(this.dirKeyA)) return 'left';
+    if (Phaser.Input.Keyboard.JustDown(this.dirKeyRight) || Phaser.Input.Keyboard.JustDown(this.dirKeyD)) return 'right';
+    return null;
+  }
+
+  private updateSequenceUI(interactionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled'): void {
+    const interaction = this.machineSystem.getActiveInteraction();
+
+    // Interaction just started — show UI
+    if (interactionState === 'active' && this.prevInteractionState !== 'active') {
+      if (interaction) {
+        this.sequenceInputUI.show(interaction.sequence, interaction.machineId);
+      }
+    }
+
+    // Interaction is active — highlight current step progress
+    if (interactionState === 'active' && interaction && interaction.currentStep > 0) {
+      this.sequenceInputUI.highlightStep(interaction.currentStep - 1);
+    }
+
+    // Interaction ended with a result
+    if (interactionState === 'success') {
+      this.sequenceInputUI.showResult('success');
+    } else if (interactionState === 'failed') {
+      this.sequenceInputUI.showResult('failed');
+    } else if (interactionState === 'cancelled') {
+      this.sequenceInputUI.showResult('cancelled');
+    }
+
+    this.prevInteractionState = interactionState;
   }
 
   private drawLayout(): void {
@@ -84,30 +182,8 @@ export class GameScene extends Phaser.Scene {
     g.lineStyle(LAYOUT.BELT_THICKNESS, 0x333333, 1);
     g.lineBetween(OUTLET_START.x, OUTLET_START.y, OUTLET_END.x, OUTLET_END.y);
 
-    // Station blocks (blue) — top, right, bottom, left
+    // Left — UpgradeTerminal (static, not a machine)
     g.fillStyle(0x4488ff, 1);
-    // Top — Machine 1
-    g.fillRect(
-      LAYOUT.CENTER_X - LAYOUT.STATION_W / 2,
-      LAYOUT.BELT_Y - LAYOUT.STATION_H,
-      LAYOUT.STATION_W,
-      LAYOUT.STATION_H,
-    );
-    // Right — Machine 2
-    g.fillRect(
-      LAYOUT.BELT_X + LAYOUT.BELT_W,
-      LAYOUT.CENTER_Y - LAYOUT.STATION_H / 2,
-      LAYOUT.STATION_H,
-      LAYOUT.STATION_W,
-    );
-    // Bottom — Machine 3
-    g.fillRect(
-      LAYOUT.CENTER_X - LAYOUT.STATION_W / 2,
-      LAYOUT.BELT_Y + LAYOUT.BELT_H,
-      LAYOUT.STATION_W,
-      LAYOUT.STATION_H,
-    );
-    // Left — UpgradeTerminal
     g.fillRect(
       LAYOUT.BELT_X - LAYOUT.STATION_H,
       LAYOUT.CENTER_Y - LAYOUT.STATION_H / 2,
@@ -141,6 +217,43 @@ export class GameScene extends Phaser.Scene {
 
   private updateScoreDisplay(): void {
     this.scoreText.setText(String(this.score).padStart(8, '0'));
+  }
+
+  private renderMachines(): void {
+    this.machineGraphics.clear();
+    const machines = this.machineSystem.getMachines();
+
+    for (const machine of machines) {
+      const color = machine.activeInteraction !== null ? 0xffcc00 : 0x4488ff;
+      this.machineGraphics.fillStyle(color, 1);
+
+      switch (machine.definition.playerPosition) {
+        case 'up': // Machine 1 — top
+          this.machineGraphics.fillRect(
+            LAYOUT.CENTER_X - LAYOUT.STATION_W / 2,
+            LAYOUT.BELT_Y - LAYOUT.STATION_H,
+            LAYOUT.STATION_W,
+            LAYOUT.STATION_H,
+          );
+          break;
+        case 'right': // Machine 2 — right
+          this.machineGraphics.fillRect(
+            LAYOUT.BELT_X + LAYOUT.BELT_W,
+            LAYOUT.CENTER_Y - LAYOUT.STATION_H / 2,
+            LAYOUT.STATION_H,
+            LAYOUT.STATION_W,
+          );
+          break;
+        case 'down': // Machine 3 — bottom
+          this.machineGraphics.fillRect(
+            LAYOUT.CENTER_X - LAYOUT.STATION_W / 2,
+            LAYOUT.BELT_Y + LAYOUT.BELT_H,
+            LAYOUT.STATION_W,
+            LAYOUT.STATION_H,
+          );
+          break;
+      }
+    }
   }
 
   private renderItems(): void {

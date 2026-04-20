@@ -26,4 +26,20 @@ describe('GameScene — integration checks', () => {
     expect(startIdx).toBeGreaterThanOrEqual(0);
     expect(gameIdx).toBeGreaterThan(startIdx);
   });
+
+  // Example 7 (machine-gameplay): GameScene.ts imports and instantiates MachineSystem
+  it('GameScene.ts source imports and instantiates MachineSystem', () => {
+    const sourcePath = path.resolve(__dirname, '../scenes/GameScene.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    expect(source).toContain('MachineSystem');
+    expect(source).toContain('new MachineSystem');
+  });
+
+  // Example 8 (machine-gameplay): GameScene.ts imports and instantiates SequenceInputUI
+  it('GameScene.ts source imports and instantiates SequenceInputUI', () => {
+    const sourcePath = path.resolve(__dirname, '../scenes/GameScene.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    expect(source).toContain('SequenceInputUI');
+    expect(source).toContain('new SequenceInputUI');
+  });
 });
