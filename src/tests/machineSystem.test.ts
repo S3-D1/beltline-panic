@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import {
   MACHINE_DEFINITIONS,
-  BASE_SEQUENCE,
 } from '../data/MachineConfig';
 import { MachineSystem } from '../systems/MachineSystem';
 
