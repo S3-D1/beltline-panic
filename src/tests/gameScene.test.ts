@@ -42,4 +42,12 @@ describe('GameScene — integration checks', () => {
     expect(source).toContain('SequenceInputUI');
     expect(source).toContain('new SequenceInputUI');
   });
+
+  // Example 6 (touch-input-layer): GameScene.ts does not use JustDown or addKey directly
+  it('GameScene.ts source does not use JustDown or addKey directly', () => {
+    const sourcePath = path.resolve(__dirname, '../scenes/GameScene.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    expect(source).not.toContain('JustDown');
+    expect(source).not.toContain('addKey');
+  });
 });

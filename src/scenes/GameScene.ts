@@ -5,7 +5,8 @@ import { ItemSystem } from '../systems/ItemSystem';
 import { ITEM_COLORS, INLET_START, INLET_END, OUTLET_START, OUTLET_END, ITEM_SIZE } from '../data/ConveyorConfig';
 import { MachineSystem } from '../systems/MachineSystem';
 import { SequenceInputUI } from '../ui/SequenceInputUI';
-import { Direction } from '../data/MachineConfig';
+import { ActionLayer } from '../systems/ActionLayer';
+import { TouchButtonUI } from '../ui/TouchButtonUI';
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
@@ -23,15 +24,8 @@ export class GameScene extends Phaser.Scene {
   private machineGraphics!: Phaser.GameObjects.Graphics;
   private machineSystem!: MachineSystem;
   private sequenceInputUI!: SequenceInputUI;
-  private interactKey!: Phaser.Input.Keyboard.Key;
-  private dirKeyUp!: Phaser.Input.Keyboard.Key;
-  private dirKeyDown!: Phaser.Input.Keyboard.Key;
-  private dirKeyLeft!: Phaser.Input.Keyboard.Key;
-  private dirKeyRight!: Phaser.Input.Keyboard.Key;
-  private dirKeyW!: Phaser.Input.Keyboard.Key;
-  private dirKeyS!: Phaser.Input.Keyboard.Key;
-  private dirKeyA!: Phaser.Input.Keyboard.Key;
-  private dirKeyD!: Phaser.Input.Keyboard.Key;
+  private actionLayer!: ActionLayer;
+  private touchButtonUI!: TouchButtonUI;
   private prevInteractionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled' = 'idle';
 
   constructor() {
@@ -40,7 +34,8 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.drawLayout();
-    this.inputSystem = new InputSystem(this);
+    this.actionLayer = new ActionLayer(this);
+    this.inputSystem = new InputSystem();
     this.conveyorSystem = new ConveyorSystem();
     this.itemSystem = new ItemSystem(this.conveyorSystem);
     this.itemGraphics = this.add.graphics();
@@ -50,20 +45,7 @@ export class GameScene extends Phaser.Scene {
     // Machine system and UI
     this.machineSystem = new MachineSystem();
     this.sequenceInputUI = new SequenceInputUI(this);
-
-    // Interact key (Space)
-    this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-    // Direction keys for machine interaction (separate from InputSystem's private keys)
-    const kb = this.input.keyboard!;
-    this.dirKeyUp = kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
-    this.dirKeyDown = kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
-    this.dirKeyLeft = kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
-    this.dirKeyRight = kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
-    this.dirKeyW = kb.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-    this.dirKeyS = kb.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    this.dirKeyA = kb.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.dirKeyD = kb.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    this.touchButtonUI = new TouchButtonUI(this, this.actionLayer);
 
     // Score text - top-right corner, monospace white
     this.scoreText = this.add.text(this.scale.width - 16, 16, '00000000', {
@@ -82,11 +64,24 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.gameOver) {
+      const { direction, interact } = this.actionLayer.consumeActions();
+
       const interactionActive = this.machineSystem.getActiveInteraction() !== null;
 
       // Skip player movement when machine interaction is active (input routing)
       if (!interactionActive) {
-        this.inputSystem.update();
+        const prevPos = this.inputSystem.getPlayerPosition();
+        this.inputSystem.update(direction);
+        const newPos = this.inputSystem.getPlayerPosition();
+
+        // Movement feedback
+        if (direction) {
+          if (newPos !== prevPos) {
+            this.touchButtonUI.triggerFeedback(direction, 'positive');
+          } else {
+            this.touchButtonUI.triggerFeedback(direction, 'negative');
+          }
+        }
       }
 
       const result = this.itemSystem.update(delta);
@@ -101,13 +96,10 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Machine system update
-      const playerPos = this.inputSystem.getPlayerPosition();
-      const interactPressed = Phaser.Input.Keyboard.JustDown(this.interactKey);
-      const direction = this.getDirectionJustPressed();
       const machineResult = this.machineSystem.update(
         this.itemSystem.getItems(),
-        playerPos,
-        interactPressed,
+        this.inputSystem.getPlayerPosition(),
+        interact,
         direction,
       );
 
@@ -115,6 +107,22 @@ export class GameScene extends Phaser.Scene {
       // so we just push returned items back
       for (const item of machineResult.itemsToReturn) {
         this.itemSystem.getItems().push(item);
+      }
+
+      // Machine interaction feedback
+      if (interactionActive && direction) {
+        if (machineResult.interactionState === 'active') {
+          this.touchButtonUI.triggerFeedback(direction, 'positive');
+        } else if (machineResult.interactionState === 'failed') {
+          this.touchButtonUI.triggerFeedback(direction, 'negative');
+        }
+      }
+      if (interact) {
+        if (machineResult.interactionState === 'active' && this.prevInteractionState !== 'active') {
+          this.touchButtonUI.triggerFeedback('interact', 'positive');
+        } else if (machineResult.interactionState === 'idle' && !interactionActive) {
+          this.touchButtonUI.triggerFeedback('interact', 'negative');
+        }
       }
 
       // Update SequenceInputUI based on interaction state changes
@@ -130,14 +138,6 @@ export class GameScene extends Phaser.Scene {
     this.playerGraphic.clear();
     this.playerGraphic.fillStyle(0xff0000, 1);
     this.playerGraphic.fillRect(x - 20, y - 20, 40, 40);
-  }
-
-  private getDirectionJustPressed(): Direction | null {
-    if (Phaser.Input.Keyboard.JustDown(this.dirKeyUp) || Phaser.Input.Keyboard.JustDown(this.dirKeyW)) return 'up';
-    if (Phaser.Input.Keyboard.JustDown(this.dirKeyDown) || Phaser.Input.Keyboard.JustDown(this.dirKeyS)) return 'down';
-    if (Phaser.Input.Keyboard.JustDown(this.dirKeyLeft) || Phaser.Input.Keyboard.JustDown(this.dirKeyA)) return 'left';
-    if (Phaser.Input.Keyboard.JustDown(this.dirKeyRight) || Phaser.Input.Keyboard.JustDown(this.dirKeyD)) return 'right';
-    return null;
   }
 
   private updateSequenceUI(interactionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled'): void {
