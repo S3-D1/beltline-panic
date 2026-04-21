@@ -7,7 +7,9 @@ import {
   MACHINE_DEFAULTS,
   BASE_SEQUENCE,
 } from '../data/MachineConfig';
-import { ConveyorItem } from './ConveyorSystem';
+import { MIN_BELT_SPACING } from '../data/ConveyorConfig';
+import { ConveyorItem, ConveyorSystem } from './ConveyorSystem';
+import { isSafeToRelease } from './SafeReleaseSystem';
 import { PlayerPosition } from './InputSystem';
 
 export interface MachineUpdateResult {
@@ -40,8 +42,10 @@ export function getActiveSequence(
 export class MachineSystem {
   private machines: MachineState[];
   private activeInteraction: ActiveInteraction | null = null;
+  private conveyorSystem: ConveyorSystem | null;
 
-  constructor() {
+  constructor(conveyorSystem?: ConveyorSystem) {
+    this.conveyorSystem = conveyorSystem ?? null;
     this.machines = MACHINE_DEFINITIONS.map((def: MachineDefinition) => {
       const state: MachineState = {
         definition: def,
@@ -54,6 +58,7 @@ export class MachineSystem {
         activeInteraction: null,
         runSequence: null,
         autoProcessing: false,
+        pendingReleaseItems: [],
       };
 
       // Generate per-run sequence for 'per-run' strategy machines
@@ -73,7 +78,7 @@ export class MachineSystem {
     return this.activeInteraction;
   }
 
-  autoProcess(machineId: string): ConveyorItem | null {
+  autoProcess(machineId: string, beltItems: ConveyorItem[] = []): ConveyorItem | null {
     const machine = this.machines.find((m) => m.definition.id === machineId);
     if (!machine || machine.heldItems.length === 0) return null;
 
@@ -82,7 +87,13 @@ export class MachineSystem {
     item.loopProgress = machine.definition.zoneProgressEnd;
     item.onInlet = false;
     item.onOutlet = false;
-    return item;
+
+    if (this.canSafelyRelease(machine, beltItems)) {
+      return item;
+    } else {
+      machine.pendingReleaseItems.push(item);
+      return null;
+    }
   }
 
   /**
@@ -112,7 +123,7 @@ export class MachineSystem {
    * Complete an auto-interaction: set the item to the machine's output status,
    * return it to the belt, and clear the machine's interaction.
    */
-  completeAutoInteraction(machineId: string): ConveyorItem | null {
+  completeAutoInteraction(machineId: string, beltItems: ConveyorItem[] = []): ConveyorItem | null {
     const machine = this.machines.find((m) => m.definition.id === machineId);
     if (!machine || !machine.activeInteraction) return null;
 
@@ -122,9 +133,15 @@ export class MachineSystem {
     interaction.item.onInlet = false;
     interaction.item.onOutlet = false;
 
-    const item = interaction.item;
-    machine.activeInteraction = null;
-    return item;
+    if (this.canSafelyRelease(machine, beltItems)) {
+      const item = interaction.item;
+      machine.activeInteraction = null;
+      return item;
+    } else {
+      machine.pendingReleaseItems.push(interaction.item);
+      machine.activeInteraction = null;
+      return null;
+    }
   }
 
   /**
@@ -146,6 +163,41 @@ export class MachineSystem {
     if (machine) {
       machine.autoProcessing = true;
     }
+  }
+
+  /** Calculate total items the machine is responsible for */
+  getUsedCapacity(machine: MachineState): number {
+    return machine.heldItems.length + (machine.activeInteraction !== null ? 1 : 0) + machine.pendingReleaseItems.length;
+  }
+
+  /** Attempt to release the oldest pending item if the belt position is safe */
+  tryReleasePending(machine: MachineState, beltItems: ConveyorItem[]): ConveyorItem | null {
+    if (machine.pendingReleaseItems.length === 0) return null;
+    if (!this.conveyorSystem) return null;
+
+    const releasePos = this.conveyorSystem.getPositionOnLoop(machine.definition.zoneProgressEnd);
+
+    if (!isSafeToRelease(releasePos, beltItems, MIN_BELT_SPACING)) return null;
+
+    const item = machine.pendingReleaseItems.shift()!;
+    item.loopProgress = machine.definition.zoneProgressEnd;
+    item.x = releasePos.x;
+    item.y = releasePos.y;
+    item.onInlet = false;
+    item.onOutlet = false;
+    return item;
+  }
+
+  /** Iterate all machines, attempt pending release for each, return all released items */
+  tryReleasePendingAll(beltItems: ConveyorItem[]): ConveyorItem[] {
+    const released: ConveyorItem[] = [];
+    for (const machine of this.machines) {
+      const item = this.tryReleasePending(machine, beltItems);
+      if (item) {
+        released.push(item);
+      }
+    }
+    return released;
   }
 
   isActive(machineId: string): boolean {
@@ -171,6 +223,7 @@ export class MachineSystem {
     playerPosition: PlayerPosition,
     interactJustPressed: boolean,
     directionJustPressed: Direction | null,
+    beltItems: ConveyorItem[] = [],
   ): MachineUpdateResult {
     const result: MachineUpdateResult = {
       itemsToRemove: [],
@@ -180,13 +233,13 @@ export class MachineSystem {
 
     // Step 1: Intake check
     for (const machine of this.machines) {
-      if (machine.heldItems.length >= machine.capacity) continue;
+      if (this.getUsedCapacity(machine) >= machine.capacity) continue;
 
       const def = machine.definition;
       const midpoint = (def.zoneProgressStart + def.zoneProgressEnd) / 2;
 
       for (let i = items.length - 1; i >= 0; i--) {
-        if (machine.heldItems.length >= machine.capacity) break;
+        if (this.getUsedCapacity(machine) >= machine.capacity) break;
 
         const item = items[i];
         if (item.onInlet || item.onOutlet) continue;
@@ -241,7 +294,7 @@ export class MachineSystem {
         interaction.currentStep++;
 
         if (interaction.currentStep === interaction.sequence.length) {
-          // Success: set output state, return item at zoneProgressEnd
+          // Success: set output state, check safe release before returning
           const machine = this.machines.find(
             (m) => m.definition.id === interaction.machineId,
           )!;
@@ -250,13 +303,17 @@ export class MachineSystem {
           interaction.item.onInlet = false;
           interaction.item.onOutlet = false;
 
-          result.itemsToReturn.push(interaction.item);
+          if (this.canSafelyRelease(machine, beltItems)) {
+            result.itemsToReturn.push(interaction.item);
+          } else {
+            machine.pendingReleaseItems.push(interaction.item);
+          }
           result.interactionState = 'success';
           machine.activeInteraction = null;
           this.activeInteraction = null;
         }
       } else {
-        // Wrong input: abort, return item unchanged at zoneProgressEnd
+        // Wrong input: abort, check safe release before returning item in original state
         const machine = this.machines.find(
           (m) => m.definition.id === interaction.machineId,
         )!;
@@ -265,7 +322,11 @@ export class MachineSystem {
         interaction.item.onInlet = false;
         interaction.item.onOutlet = false;
 
-        result.itemsToReturn.push(interaction.item);
+        if (this.canSafelyRelease(machine, beltItems)) {
+          result.itemsToReturn.push(interaction.item);
+        } else {
+          machine.pendingReleaseItems.push(interaction.item);
+        }
         result.interactionState = 'failed';
         machine.activeInteraction = null;
         this.activeInteraction = null;
@@ -284,13 +345,27 @@ export class MachineSystem {
       interaction.item.onInlet = false;
       interaction.item.onOutlet = false;
 
-      result.itemsToReturn.push(interaction.item);
+      if (this.canSafelyRelease(machine, beltItems)) {
+        result.itemsToReturn.push(interaction.item);
+      } else {
+        machine.pendingReleaseItems.push(interaction.item);
+      }
       result.interactionState = 'cancelled';
       machine.activeInteraction = null;
       this.activeInteraction = null;
     }
 
     return result;
+  }
+
+  /**
+   * Check if it's safe to release an item at the machine's zone end position.
+   * Falls back to true (always release) when no ConveyorSystem is available.
+   */
+  private canSafelyRelease(machine: MachineState, beltItems: ConveyorItem[]): boolean {
+    if (!this.conveyorSystem) return true;
+    const releasePos = this.conveyorSystem.getPositionOnLoop(machine.definition.zoneProgressEnd);
+    return isSafeToRelease(releasePos, beltItems, MIN_BELT_SPACING);
   }
 
   private getSequenceForMachine(machine: MachineState): Direction[] {

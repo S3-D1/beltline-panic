@@ -28,6 +28,7 @@ export interface MachineState {
   activeInteraction: ActiveInteraction | null;
   runSequence: Direction[] | null;  // for 'per-run' strategy, generated once per run
   autoProcessing: boolean;          // true when auto-processing fires, reset each frame
+  pendingReleaseItems: ConveyorItem[];  // items waiting for safe release onto belt
 }
 
 export interface ActiveInteraction {

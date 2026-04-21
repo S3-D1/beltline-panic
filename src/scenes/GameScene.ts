@@ -89,7 +89,7 @@ export class GameScene extends Phaser.Scene {
     this.machineGraphics = this.add.graphics();
 
     // Machine system and UI
-    this.machineSystem = new MachineSystem();
+    this.machineSystem = new MachineSystem(this.conveyorSystem);
     this.sequenceInputUI = new SequenceInputUI(this, this.layoutSystem);
     this.touchButtonUI = new TouchButtonUI(this, this.actionLayer, this.layoutSystem);
 
@@ -215,11 +215,18 @@ export class GameScene extends Phaser.Scene {
           this.inputSystem.getPlayerPosition(),
           interact,
           direction,
+          this.itemSystem.getItems(),
         );
 
         // Handle returned items: MachineSystem already spliced intaken items from the array,
         // so we just push returned items back
         for (const item of machineResult.itemsToReturn) {
+          this.itemSystem.getItems().push(item);
+        }
+
+        // Attempt to release pending items from all machines
+        const releasedItems = this.machineSystem.tryReleasePendingAll(this.itemSystem.getItems());
+        for (const item of releasedItems) {
           this.itemSystem.getItems().push(item);
         }
 
@@ -249,6 +256,7 @@ export class GameScene extends Phaser.Scene {
         this.machineSystem.getMachines(),
         this.gameManager,
         this.machineSystem,
+        this.itemSystem.getItems(),
       );
       for (const item of autoProcessedItems) {
         this.itemSystem.getItems().push(item);
