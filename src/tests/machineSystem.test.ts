@@ -82,4 +82,11 @@ describe('MachineSystem — structural checks', () => {
     expect(source).not.toMatch(/from\s+['"]phaser['"]/);
     expect(source).not.toMatch(/Phaser\.Physics/);
   });
+
+  // Example 16 (upgrade-terminal): MachineSystem.ts source has autoProcess method
+  it('MachineSystem.ts source has autoProcess method', () => {
+    const sourcePath = path.resolve(__dirname, '../systems/MachineSystem.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    expect(source).toContain('autoProcess');
+  });
 });

@@ -53,6 +53,7 @@ export class MachineSystem {
         heldItems: [],
         activeInteraction: null,
         runSequence: null,
+        autoProcessing: false,
       };
 
       // Generate per-run sequence for 'per-run' strategy machines
@@ -70,6 +71,99 @@ export class MachineSystem {
 
   getActiveInteraction(): ActiveInteraction | null {
     return this.activeInteraction;
+  }
+
+  autoProcess(machineId: string): ConveyorItem | null {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (!machine || machine.heldItems.length === 0) return null;
+
+    const item = machine.heldItems.shift()!;
+    item.state = machine.definition.outputStatus;
+    item.loopProgress = machine.definition.zoneProgressEnd;
+    item.onInlet = false;
+    item.onOutlet = false;
+    return item;
+  }
+
+  /**
+   * Start an auto-interaction on a machine.
+   * Takes an item from heldItems, generates the sequence, and sets
+   * machine.activeInteraction. Does NOT set this.activeInteraction
+   * (that is reserved for player-owned interactions).
+   */
+  startAutoInteraction(machineId: string): void {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (!machine || machine.heldItems.length === 0) return;
+    if (machine.activeInteraction !== null) return;
+
+    const item = machine.heldItems.shift()!;
+    const sequence = this.getSequenceForMachine(machine);
+
+    machine.activeInteraction = {
+      machineId,
+      item,
+      originalState: item.state,
+      sequence,
+      currentStep: 0,
+    };
+  }
+
+  /**
+   * Complete an auto-interaction: set the item to the machine's output status,
+   * return it to the belt, and clear the machine's interaction.
+   */
+  completeAutoInteraction(machineId: string): ConveyorItem | null {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (!machine || !machine.activeInteraction) return null;
+
+    const interaction = machine.activeInteraction;
+    interaction.item.state = machine.definition.outputStatus;
+    interaction.item.loopProgress = machine.definition.zoneProgressEnd;
+    interaction.item.onInlet = false;
+    interaction.item.onOutlet = false;
+
+    const item = interaction.item;
+    machine.activeInteraction = null;
+    return item;
+  }
+
+  /**
+   * Check if the player (not automation) is interacting with a specific machine.
+   * The player owns the interaction when this.activeInteraction points to that machine.
+   */
+  isPlayerInteracting(machineId: string): boolean {
+    return this.activeInteraction !== null && this.activeInteraction.machineId === machineId;
+  }
+
+  resetAutoProcessingFlags(): void {
+    for (const machine of this.machines) {
+      machine.autoProcessing = false;
+    }
+  }
+
+  setAutoProcessing(machineId: string): void {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (machine) {
+      machine.autoProcessing = true;
+    }
+  }
+
+  isActive(machineId: string): boolean {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (!machine) return false;
+
+    // Player is manually interacting → active
+    if (this.activeInteraction !== null && this.activeInteraction.machineId === machineId) {
+      return true;
+    }
+
+    // Automation is working on this machine
+    if (machine.activeInteraction !== null && machine.automationLevel > 0) {
+      // Active while automation still has steps to solve
+      return machine.activeInteraction.currentStep < machine.automationLevel;
+    }
+
+    return false;
   }
 
   update(
@@ -111,20 +205,30 @@ export class MachineSystem {
       const machine = this.machines.find(
         (m) => m.definition.playerPosition === playerPosition,
       );
-      if (machine && machine.heldItems.length > 0) {
-        const item = machine.heldItems.shift()!;
-        const sequence = this.getSequenceForMachine(machine);
+      if (machine) {
+        // Check if there's an existing auto-interaction the player can take over
+        if (machine.activeInteraction !== null) {
+          this.activeInteraction = machine.activeInteraction;
+          result.interactionState = 'active';
+          return result;
+        }
 
-        this.activeInteraction = {
-          machineId: machine.definition.id,
-          item,
-          originalState: item.state,
-          sequence,
-          currentStep: 0,
-        };
-        machine.activeInteraction = this.activeInteraction;
-        result.interactionState = 'active';
-        return result;
+        // Otherwise start a fresh interaction if machine has items
+        if (machine.heldItems.length > 0) {
+          const item = machine.heldItems.shift()!;
+          const sequence = this.getSequenceForMachine(machine);
+
+          this.activeInteraction = {
+            machineId: machine.definition.id,
+            item,
+            originalState: item.state,
+            sequence,
+            currentStep: 0,
+          };
+          machine.activeInteraction = this.activeInteraction;
+          result.interactionState = 'active';
+          return result;
+        }
       }
     }
 
