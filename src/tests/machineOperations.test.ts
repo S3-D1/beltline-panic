@@ -48,7 +48,7 @@ describe('Manual interaction — no automation', () => {
   it('correct sequence inputs complete the interaction successfully', () => {
     const ms = new MachineSystem();
     const machine = ms.getMachines()[0];
-    const item = placeItemInMachine(machine, 'new');
+    placeItemInMachine(machine, 'new');
 
     // Start interaction
     ms.update([], 'up', true, null);
@@ -284,11 +284,11 @@ describe('Automation — speed upgrade reduces timing', () => {
     placeItemInMachine(machine, 'new');
 
     // 999ms — not enough
-    let returned = as.update(999, ms.getMachines(), gm, ms);
+    as.update(999, ms.getMachines(), gm, ms);
     expect(machine.activeInteraction).toBeNull();
 
     // 1ms more — now 1000ms total, should trigger
-    returned = as.update(1, ms.getMachines(), gm, ms);
+    as.update(1, ms.getMachines(), gm, ms);
     expect(machine.activeInteraction).not.toBeNull();
     expect(machine.activeInteraction!.currentStep).toBe(1);
   });
