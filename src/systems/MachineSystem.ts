@@ -53,6 +53,7 @@ export class MachineSystem {
         heldItems: [],
         activeInteraction: null,
         runSequence: null,
+        autoProcessing: false,
       };
 
       // Generate per-run sequence for 'per-run' strategy machines
@@ -70,6 +71,37 @@ export class MachineSystem {
 
   getActiveInteraction(): ActiveInteraction | null {
     return this.activeInteraction;
+  }
+
+  autoProcess(machineId: string): ConveyorItem | null {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (!machine || machine.heldItems.length === 0) return null;
+
+    const item = machine.heldItems.shift()!;
+    item.state = machine.definition.outputStatus;
+    item.loopProgress = machine.definition.zoneProgressEnd;
+    item.onInlet = false;
+    item.onOutlet = false;
+    return item;
+  }
+
+  resetAutoProcessingFlags(): void {
+    for (const machine of this.machines) {
+      machine.autoProcessing = false;
+    }
+  }
+
+  setAutoProcessing(machineId: string): void {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (machine) {
+      machine.autoProcessing = true;
+    }
+  }
+
+  isActive(machineId: string): boolean {
+    const machine = this.machines.find((m) => m.definition.id === machineId);
+    if (!machine) return false;
+    return machine.activeInteraction !== null || machine.autoProcessing === true;
   }
 
   update(

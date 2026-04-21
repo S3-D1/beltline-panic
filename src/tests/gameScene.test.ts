@@ -50,4 +50,18 @@ describe('GameScene — integration checks', () => {
     expect(source).not.toContain('JustDown');
     expect(source).not.toContain('addKey');
   });
+
+  // Example 14 (upgrade-terminal): GameScene.ts source imports GameManager
+  it('GameScene.ts source imports GameManager', () => {
+    const sourcePath = path.resolve(__dirname, '../scenes/GameScene.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    expect(source).toMatch(/import\s+.*GameManager.*from\s+['"]\.\.\/systems\/GameManager['"]/);
+  });
+
+  // Example 15 (upgrade-terminal): GameScene.ts source imports AutomationSystem
+  it('GameScene.ts source imports AutomationSystem', () => {
+    const sourcePath = path.resolve(__dirname, '../scenes/GameScene.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    expect(source).toMatch(/import\s+.*AutomationSystem.*from\s+['"]\.\.\/systems\/AutomationSystem['"]/);
+  });
 });

@@ -27,6 +27,7 @@ export interface MachineState {
   heldItems: ConveyorItem[];       // items currently inside the machine
   activeInteraction: ActiveInteraction | null;
   runSequence: Direction[] | null;  // for 'per-run' strategy, generated once per run
+  autoProcessing: boolean;          // true when auto-processing fires, reset each frame
 }
 
 export interface ActiveInteraction {
