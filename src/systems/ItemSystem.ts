@@ -66,31 +66,65 @@ export class ItemSystem {
       this.spawnTimer -= SPAWN_INTERVAL;
     }
 
-    // 2a. Inlet-to-belt gating — prevent leading inlet item from transitioning if belt is unsafe (Task 9.2)
-    // Record which items are currently on the inlet before the conveyor advances them
-    const wasOnInlet = new Set(this.items.filter((item) => item.onInlet));
+    // 2a. Inlet-to-belt gating — clamp leading inlet item at junction BEFORE conveyor advances
+    // This prevents the conveyor from transitioning the item onto the belt when it's unsafe.
+    const inletItemsBeforeAdvance = this.items
+      .filter((item) => item.onInlet)
+      .sort((a, b) => b.inletProgress - a.inletProgress); // leading items first
+
+    if (inletItemsBeforeAdvance.length > 0) {
+      const leadingItem = inletItemsBeforeAdvance[0];
+      // If the leading item is at or near the junction, check belt safety
+      if (leadingItem.inletProgress >= 1.0 - 0.001) {
+        const beltEntryPoint = this.conveyor.getPositionOnLoop(0);
+        const beltItems = this.items.filter(
+          (other) => !other.onInlet && !other.onOutlet,
+        );
+        if (!isSafeToRelease(beltEntryPoint, beltItems, MIN_BELT_SPACING)) {
+          // Unsafe — clamp at junction so conveyor.update() won't transition it
+          leadingItem.inletProgress = 0.999;
+          const pos = this.conveyor.getPositionOnInlet(1.0);
+          leadingItem.x = pos.x;
+          leadingItem.y = pos.y;
+        }
+      }
+    }
 
     // 2b. Advance positions via ConveyorSystem
     this.conveyor.update(delta, this.items);
 
-    // 2c. Inlet-to-belt gating — revert items that just transitioned if belt entry is unsafe
-    for (const item of wasOnInlet) {
-      // Item was on inlet but conveyor just transitioned it to the belt
-      if (!item.onInlet) {
-        const beltEntryPoint = this.conveyor.getPositionOnLoop(0);
-        // Check safety against belt items (excluding this item which just arrived)
-        const beltItems = this.items.filter(
-          (other) => other !== item && !other.onInlet && !other.onOutlet,
-        );
-        if (!isSafeToRelease(beltEntryPoint, beltItems, MIN_BELT_SPACING)) {
-          // Unsafe — revert back to inlet at junction
-          item.onInlet = true;
-          item.inletProgress = 1.0;
-          item.loopProgress = 0;
-          const pos = this.conveyor.getPositionOnInlet(1.0);
-          item.x = pos.x;
-          item.y = pos.y;
+    // 2c. Inlet-to-belt gating — after advance, only allow ONE item to transition per frame.
+    // If multiple items transitioned (due to high delta or clustering), revert all but the first.
+    // Also revert the first if the belt entry is unsafe (edge case with simultaneous arrivals).
+    const justTransitioned = this.items.filter(
+      (item) => !item.onInlet && !item.onOutlet && item.loopProgress < 0.01,
+    );
+    // Check items that just arrived at belt entry — keep at most one, and only if safe
+    if (justTransitioned.length > 0) {
+      // Sort by loopProgress so the most advanced one is "first"
+      justTransitioned.sort((a, b) => a.loopProgress - b.loopProgress);
+
+      const beltEntryPoint = this.conveyor.getPositionOnLoop(0);
+
+      for (let i = 0; i < justTransitioned.length; i++) {
+        const item = justTransitioned[i];
+        // For the first item, check safety against existing belt items (excluding itself)
+        // For subsequent items, always revert (only one transition per frame)
+        if (i === 0) {
+          const beltItems = this.items.filter(
+            (other) => other !== item && !other.onInlet && !other.onOutlet,
+          );
+          if (isSafeToRelease(beltEntryPoint, beltItems, MIN_BELT_SPACING)) {
+            continue; // safe — keep this one on the belt
+          }
         }
+        // Revert back to inlet at junction
+        item.onInlet = true;
+        item.inletProgress = 1.0;
+        item.loopProgress = 0;
+        const pos = this.conveyor.getPositionOnInlet(1.0);
+        item.x = pos.x;
+        item.y = pos.y;
       }
     }
 
