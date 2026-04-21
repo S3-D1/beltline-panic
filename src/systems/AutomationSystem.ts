@@ -32,6 +32,7 @@ export class AutomationSystem {
     machines: MachineState[],
     gameManager: GameManager,
     machineSystem: MachineSystem,
+    beltItems: ConveyorItem[] = [],
   ): ConveyorItem[] {
     const returnedItems: ConveyorItem[] = [];
 
@@ -75,7 +76,7 @@ export class AutomationSystem {
 
             // Check if that single step completed the sequence
             if (started.currentStep >= started.sequence.length) {
-              const item = machineSystem.completeAutoInteraction(machineId);
+              const item = machineSystem.completeAutoInteraction(machineId, beltItems);
               if (item) {
                 returnedItems.push(item);
               }
@@ -107,7 +108,7 @@ export class AutomationSystem {
 
         // Check if the full sequence is now complete
         if (interaction.currentStep >= interaction.sequence.length) {
-          const item = machineSystem.completeAutoInteraction(machineId);
+          const item = machineSystem.completeAutoInteraction(machineId, beltItems);
           if (item) {
             returnedItems.push(item);
           }

@@ -63,5 +63,9 @@ export const ITEM_VALUES: Record<ItemState, number> = {
   packaged:  22,  // 10 * 1.1 * 2
 };
 
+// --- Spacing ---
+export const ITEM_DIAGONAL = Math.sqrt(ITEM_SIZE * ITEM_SIZE + ITEM_SIZE * ITEM_SIZE);
+export const MIN_BELT_SPACING = 2 * ITEM_DIAGONAL;
+
 // --- Collision ---
 export const COLLISION_THRESHOLD = ITEM_SIZE; // distance in pixels
