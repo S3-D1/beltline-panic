@@ -385,7 +385,9 @@ export class GameScene extends Phaser.Scene {
     const indicatorRadius = ls.scaleValue(6);
 
     for (const machine of machines) {
-      const color = machine.activeInteraction !== null ? 0xffcc00 : 0x4488ff;
+      // Yellow only for manual player interaction, blue otherwise
+      const isPlayerManual = this.machineSystem.isPlayerInteracting(machine.definition.id);
+      const color = isPlayerManual ? 0xffcc00 : 0x4488ff;
       this.machineGraphics.fillStyle(color, 1);
 
       // Activity indicator color: green if active, red otherwise
