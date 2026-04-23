@@ -111,12 +111,12 @@ Additional documentation is provided within [/docs](./docs):
 ## Roadmap
 
 - [x] Project Structure & CI
-- [ ] Core concept
-- [ ] Core conveyor prototype
-- [ ] Item processing states
-- [ ] Machine interaction loop
-- [ ] Upgrade system
-- [ ] Automation progression
+- [x] Core concept
+- [x] Core conveyor prototype
+- [x] Item processing states
+- [x] Machine interaction loop
+- [x] Upgrade system
+- [x] Automation progression
 - [ ] Difficulty scaling
 - [ ] Juice, UI, audio, and polish
 
@@ -126,7 +126,7 @@ In active development for Gamedev.js Jam 2026.
 
 ## Play
 
-Coming soon.
+Play [Beltline Panic](https://s3-d1.github.io/beltline-panic/).
 
 ## License
 
