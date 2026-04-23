@@ -1,5 +1,7 @@
 import { UPGRADE_CONFIG, UpgradeType } from '../data/UpgradeConfig';
 import { MachineState, MACHINE_DEFAULTS } from '../data/MachineConfig';
+import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
+import { evaluateCurve } from '../utils/progression';
 
 export interface UpgradeLevels {
   capacity: number;
@@ -13,12 +15,62 @@ export class GameManager {
   private budget: number = 0;
   private upgradeLevels: Record<string, UpgradeLevels>;
 
+  // Delivery state
+  private elapsedTime: number = 0;
+  private currentSpawnInterval: number;
+  private currentBeltSpeed: number;
+  private currentJitter: number;
+
   constructor() {
     this.upgradeLevels = {
       machine1: { capacity: 0, quality: 0, speed: 0, automation: 0 },
       machine2: { capacity: 0, quality: 0, speed: 0, automation: 0 },
       machine3: { capacity: 0, quality: 0, speed: 0, automation: 0 },
     };
+
+    // Initialize delivery fields from config
+    this.currentSpawnInterval = DELIVERY_CONFIG.initialSpawnInterval;
+    this.currentBeltSpeed = DELIVERY_CONFIG.initialBeltSpeed;
+    this.currentJitter = DELIVERY_CONFIG.initialJitter;
+  }
+
+  /** Advance elapsed time and recalculate delivery progression */
+  update(delta: number): void {
+    this.elapsedTime += delta;
+
+    // Evaluate progression curves at current elapsed time
+    const spawnMultiplier = evaluateCurve(DELIVERY_CONFIG.spawnIntervalCurve, this.elapsedTime);
+    const speedMultiplier = evaluateCurve(DELIVERY_CONFIG.beltSpeedCurve, this.elapsedTime);
+
+    // Apply multipliers to initial values, clamped to floor/ceiling
+    this.currentSpawnInterval = Math.max(
+      DELIVERY_CONFIG.initialSpawnInterval * spawnMultiplier,
+      DELIVERY_CONFIG.minSpawnInterval,
+    );
+    this.currentBeltSpeed = Math.min(
+      DELIVERY_CONFIG.initialBeltSpeed * speedMultiplier,
+      DELIVERY_CONFIG.maxBeltSpeed,
+    );
+  }
+
+  /** Returns the current average spawn interval in ms */
+  getSpawnInterval(): number {
+    return this.currentSpawnInterval;
+  }
+
+  /** Returns the current jitter fraction (0–1) */
+  getSpawnJitter(): number {
+    return this.currentJitter;
+  }
+
+  /** Returns the current belt speed in px/s */
+  getBeltSpeed(): number {
+    return this.currentBeltSpeed;
+  }
+
+  /** Returns elapsed game time in ms */
+  getElapsedTime(): number {
+    return this.elapsedTime;
   }
 
   getScore(): number {

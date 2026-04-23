@@ -4,7 +4,6 @@ import {
   LOOP_WAYPOINTS,
   INLET_START,
   INLET_END,
-  CONVEYOR_SPEED,
   OUTLET_START,
   OUTLET_END,
   OUTLET_BRANCH_PROGRESS,
@@ -85,10 +84,10 @@ export class ConveyorSystem {
     };
   }
 
-  update(delta: number, items: ConveyorItem[]): void {
+  update(delta: number, items: ConveyorItem[], speed: number): void {
     if (delta <= 0) return;
 
-    const pixelsPerMs = CONVEYOR_SPEED / 1000;
+    const pixelsPerMs = speed / 1000;
     const distanceThisFrame = pixelsPerMs * delta;
 
     for (const item of items) {

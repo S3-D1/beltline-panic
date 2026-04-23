@@ -1,13 +1,15 @@
 import {
-  SPAWN_INTERVAL,
   INLET_START,
   INLET_END,
   ITEM_VALUES,
   COLLISION_THRESHOLD,
   MIN_BELT_SPACING,
 } from '../data/ConveyorConfig';
+import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 import { ConveyorSystem, ConveyorItem } from './ConveyorSystem';
+import { GameManager } from '../systems/GameManager';
 import { isSafeToRelease } from './SafeReleaseSystem';
+import { createSeededRandom } from '../utils/random';
 
 export interface UpdateResult {
   exitedValues: number[];
@@ -23,14 +25,18 @@ const minInletSpacingProgress = MIN_BELT_SPACING / inletLength;
 export class ItemSystem {
   private items: ConveyorItem[] = [];
   private spawnTimer = 0;
+  private nextDelay: number = DELIVERY_CONFIG.initialSpawnInterval;
+  private rng: () => number;
 
-  constructor(private conveyor: ConveyorSystem) {}
+  constructor(private conveyor: ConveyorSystem, seed?: number) {
+    this.rng = createSeededRandom(seed ?? Date.now());
+  }
 
-  update(delta: number): UpdateResult {
+  update(delta: number, gameManager: GameManager): UpdateResult {
     // 1. Tick spawn timer and spawn new items (with inlet overflow detection — Task 9.3)
     this.spawnTimer += delta;
     let spawnCollision: { a: ConveyorItem; b: ConveyorItem } | null = null;
-    if (this.spawnTimer >= SPAWN_INTERVAL) {
+    if (this.spawnTimer >= this.nextDelay) {
       // Check if the inlet has room for a new item
       const inletItems = this.items.filter((item) => item.onInlet);
       const rearmostItem = inletItems.length > 0
@@ -63,7 +69,13 @@ export class ItemSystem {
           outletProgress: 0,
         });
       }
-      this.spawnTimer -= SPAWN_INTERVAL;
+      this.spawnTimer -= this.nextDelay;
+
+      // Compute next jittered spawn delay
+      const interval = gameManager.getSpawnInterval();
+      const jitter = gameManager.getSpawnJitter();
+      this.nextDelay = interval + interval * jitter * (2 * this.rng() - 1);
+      this.nextDelay = Math.max(this.nextDelay, DELIVERY_CONFIG.minSpawnDelay);
     }
 
     // 2a. Inlet-to-belt gating — clamp leading inlet item at junction BEFORE conveyor advances
@@ -91,7 +103,7 @@ export class ItemSystem {
     }
 
     // 2b. Advance positions via ConveyorSystem
-    this.conveyor.update(delta, this.items);
+    this.conveyor.update(delta, this.items, gameManager.getBeltSpeed());
 
     // 2c. Inlet-to-belt gating — after advance, only allow ONE item to transition per frame.
     // If multiple items transitioned (due to high delta or clustering), revert all but the first.
