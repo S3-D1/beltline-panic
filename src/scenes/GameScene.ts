@@ -197,7 +197,10 @@ export class GameScene extends Phaser.Scene {
         }
       }
 
-      const result = this.itemSystem.update(delta);
+      // Advance delivery progression (spawn interval, belt speed) before systems tick
+      this.gameManager.update(delta);
+
+      const result = this.itemSystem.update(delta, this.gameManager);
 
       for (const val of result.exitedValues) {
         this.gameManager.addPayout(val);

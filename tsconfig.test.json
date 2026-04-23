@@ -4,6 +4,6 @@
     "types": ["node"],
     "moduleResolution": "node"
   },
-  "include": ["src/tests", "src/utils/math.test.ts"],
+  "include": ["src/tests", "src/utils/math.test.ts", "src/utils/random.test.ts"],
   "exclude": []
 }
