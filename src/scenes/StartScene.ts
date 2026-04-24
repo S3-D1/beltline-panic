@@ -47,7 +47,7 @@ export class StartScene extends Phaser.Scene {
     ).setOrigin(0.5).setDepth(1);
 
     // Audio: get AudioManager and play intro music
-    const audioManager = (this.game as any).audioManager as AudioManager;
+    const audioManager = this.game.audioManager as AudioManager;
     audioManager.playIntroMusic();
 
     // Mute button UI (bottom-right corner) — handles both click and M key

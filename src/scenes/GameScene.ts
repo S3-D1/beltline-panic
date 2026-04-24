@@ -154,7 +154,7 @@ export class GameScene extends Phaser.Scene {
     ).setOrigin(1, 0);
 
     // Audio: get AudioManager and play gameplay music
-    this.audioManager = (this.game as any).audioManager as AudioManager;
+    this.audioManager = this.game.audioManager as AudioManager;
     this.audioManager.playGameplayMusic();
 
     // Mute button UI (bottom-right corner) — handles both click and M key

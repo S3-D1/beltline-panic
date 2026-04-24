@@ -19,7 +19,7 @@ export class MuteButtonUI {
 
   constructor(scene: Phaser.Scene, layoutSystem: LayoutSystem) {
     this.scene = scene;
-    this.audioManager = (scene.game as any).audioManager as AudioManager;
+    this.audioManager = scene.game.audioManager as AudioManager;
 
     const fontSize = layoutSystem.scaleFontSize(BASE_FONT_SIZE);
     this.lastMuted = this.audioManager.isMuted();

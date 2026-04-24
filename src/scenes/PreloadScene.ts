@@ -18,7 +18,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    (this.game as any).audioManager = new AudioManager(this.game);
+    this.game.audioManager = new AudioManager(this.game);
     this.scene.start('StartScene');
   }
 }

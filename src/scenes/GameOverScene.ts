@@ -45,7 +45,7 @@ export class GameOverScene extends Phaser.Scene {
     this.layoutSystem.update(this.scale.width, this.scale.height);
 
     // Audio: get AudioManager and play game-over stinger
-    this.audioManager = (this.game as any).audioManager as AudioManager;
+    this.audioManager = this.game.audioManager as AudioManager;
     this.audioManager.playGameOverStinger();
 
     // Create mute button UI — handles both click and M key

@@ -4,7 +4,6 @@ import {
   AUDIO_KEYS,
   GAMEPLAY_MUSIC_RATE_MIN,
   GAMEPLAY_MUSIC_RATE_MAX,
-  GAMEPLAY_MUSIC_RATE_SMOOTHING,
 } from '../data/AudioKeys';
 
 // --- Mock helpers ---
@@ -18,13 +17,41 @@ function createMockSound() {
   };
 }
 
+type MockSound = ReturnType<typeof createMockSound>;
+
+interface MockGame {
+  sound: {
+    mute: boolean;
+    add: ReturnType<typeof vi.fn>;
+    get: ReturnType<typeof vi.fn>;
+    play: ReturnType<typeof vi.fn>;
+  };
+  _sounds: Record<string, MockSound>;
+}
+
+/** Access AudioManager private fields for test assertions. */
+interface AudioManagerInternals {
+  currentMusicKey: string | null;
+  currentMusic: MockSound | null;
+  currentRate: number;
+}
+
+function internals(am: AudioManager): AudioManagerInternals {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return am as any;
+}
+
+function mockSounds(game: MockGame): Record<string, MockSound> {
+  return game._sounds;
+}
+
 /**
  * Create a mock Phaser.Game with a mock sound manager.
  * `add()` registers sounds so `get()` can retrieve them.
  * `play()` is a fire-and-forget SFX call.
  */
-function createMockGame() {
-  const sounds: Record<string, ReturnType<typeof createMockSound>> = {};
+function createMockGame(): MockGame {
+  const sounds: Record<string, MockSound> = {};
 
   const soundManager = {
     mute: false,
@@ -37,21 +64,22 @@ function createMockGame() {
     play: vi.fn(),
   };
 
-  return { sound: soundManager, _sounds: sounds } as unknown as Phaser.Game & {
-    sound: typeof soundManager;
-    _sounds: typeof sounds;
-  };
+  return { sound: soundManager, _sounds: sounds };
+}
+
+function asGame(mock: MockGame): Phaser.Game {
+  return mock as unknown as Phaser.Game;
 }
 
 // --- Tests ---
 
 describe('AudioManager — music playback methods', () => {
-  let game: ReturnType<typeof createMockGame>;
+  let game: MockGame;
   let audioManager: AudioManager;
 
   beforeEach(() => {
     game = createMockGame();
-    audioManager = new AudioManager(game as unknown as Phaser.Game);
+    audioManager = new AudioManager(asGame(game));
   });
 
   // Validates: Requirements 2.1
@@ -59,9 +87,9 @@ describe('AudioManager — music playback methods', () => {
     audioManager.playIntroMusic();
 
     expect(game.sound.add).toHaveBeenCalledWith(AUDIO_KEYS.MUSIC_INTRO, { loop: true });
-    const sound = (game as any)._sounds[AUDIO_KEYS.MUSIC_INTRO];
+    const sound = mockSounds(game)[AUDIO_KEYS.MUSIC_INTRO];
     expect(sound.play).toHaveBeenCalled();
-    expect((audioManager as any).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_INTRO);
+    expect(internals(audioManager).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_INTRO);
   });
 
   // Validates: Requirements 2.2
@@ -69,9 +97,9 @@ describe('AudioManager — music playback methods', () => {
     audioManager.playGameplayMusic();
 
     expect(game.sound.add).toHaveBeenCalledWith(AUDIO_KEYS.MUSIC_FACTORY, { loop: true });
-    const sound = (game as any)._sounds[AUDIO_KEYS.MUSIC_FACTORY];
+    const sound = mockSounds(game)[AUDIO_KEYS.MUSIC_FACTORY];
     expect(sound.play).toHaveBeenCalled();
-    expect((audioManager as any).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_FACTORY);
+    expect(internals(audioManager).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_FACTORY);
   });
 
   // Validates: Requirements 2.3
@@ -79,9 +107,9 @@ describe('AudioManager — music playback methods', () => {
     audioManager.playScoreboardMusic();
 
     expect(game.sound.add).toHaveBeenCalledWith(AUDIO_KEYS.MUSIC_SCOREBOARD, { loop: true });
-    const sound = (game as any)._sounds[AUDIO_KEYS.MUSIC_SCOREBOARD];
+    const sound = mockSounds(game)[AUDIO_KEYS.MUSIC_SCOREBOARD];
     expect(sound.play).toHaveBeenCalled();
-    expect((audioManager as any).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_SCOREBOARD);
+    expect(internals(audioManager).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_SCOREBOARD);
   });
 
   // Validates: Requirements 2.4
@@ -89,34 +117,34 @@ describe('AudioManager — music playback methods', () => {
     audioManager.playGameOverStinger();
 
     expect(game.sound.add).toHaveBeenCalledWith(AUDIO_KEYS.STINGER_GAME_OVER, { loop: false });
-    const sound = (game as any)._sounds[AUDIO_KEYS.STINGER_GAME_OVER];
+    const sound = mockSounds(game)[AUDIO_KEYS.STINGER_GAME_OVER];
     expect(sound.play).toHaveBeenCalled();
-    expect((audioManager as any).currentMusicKey).toBe(AUDIO_KEYS.STINGER_GAME_OVER);
+    expect(internals(audioManager).currentMusicKey).toBe(AUDIO_KEYS.STINGER_GAME_OVER);
   });
 
   // Validates: Requirements 2.7
   it('calling same music method twice does not restart (idempotence)', () => {
     audioManager.playIntroMusic();
-    const firstSound = (game as any)._sounds[AUDIO_KEYS.MUSIC_INTRO];
-    const firstRef = (audioManager as any).currentMusic;
+    const firstSound = mockSounds(game)[AUDIO_KEYS.MUSIC_INTRO];
+    const firstRef = internals(audioManager).currentMusic;
 
     audioManager.playIntroMusic();
 
     // add() should only be called once — second call is a no-op
     expect(game.sound.add).toHaveBeenCalledTimes(1);
     expect(firstSound.play).toHaveBeenCalledTimes(1);
-    expect((audioManager as any).currentMusic).toBe(firstRef);
+    expect(internals(audioManager).currentMusic).toBe(firstRef);
   });
 
   // Validates: Requirements 2.5, 4.7
   it('switching music stops previous track before starting new one', () => {
     audioManager.playIntroMusic();
-    const introSound = (game as any)._sounds[AUDIO_KEYS.MUSIC_INTRO];
+    const introSound = mockSounds(game)[AUDIO_KEYS.MUSIC_INTRO];
 
     audioManager.playGameplayMusic();
 
     expect(introSound.stop).toHaveBeenCalled();
-    expect((audioManager as any).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_FACTORY);
+    expect(internals(audioManager).currentMusicKey).toBe(AUDIO_KEYS.MUSIC_FACTORY);
   });
 
   // Validates: Requirements 1.4
@@ -135,12 +163,12 @@ describe('AudioManager — music playback methods', () => {
 });
 
 describe('AudioManager — SFX methods', () => {
-  let game: ReturnType<typeof createMockGame>;
+  let game: MockGame;
   let audioManager: AudioManager;
 
   beforeEach(() => {
     game = createMockGame();
-    audioManager = new AudioManager(game as unknown as Phaser.Game);
+    audioManager = new AudioManager(asGame(game));
   });
 
   // Validates: Requirements 3.1
@@ -163,12 +191,12 @@ describe('AudioManager — SFX methods', () => {
 });
 
 describe('AudioManager — mute control', () => {
-  let game: ReturnType<typeof createMockGame>;
+  let game: MockGame;
   let audioManager: AudioManager;
 
   beforeEach(() => {
     game = createMockGame();
-    audioManager = new AudioManager(game as unknown as Phaser.Game);
+    audioManager = new AudioManager(asGame(game));
   });
 
   // Validates: Requirements 4.3, 8.1
@@ -208,7 +236,7 @@ describe('AudioManager — mute control', () => {
 });
 
 describe('AudioManager — updateGameplayMusicSpeed', () => {
-  let game: ReturnType<typeof createMockGame>;
+  let game: MockGame;
   let audioManager: AudioManager;
 
   const BASE = 60;
@@ -216,14 +244,14 @@ describe('AudioManager — updateGameplayMusicSpeed', () => {
 
   beforeEach(() => {
     game = createMockGame();
-    audioManager = new AudioManager(game as unknown as Phaser.Game);
+    audioManager = new AudioManager(asGame(game));
   });
 
   // Validates: Requirements 5.6
   it('no-op when currentMusicKey is not music_factory_loop', () => {
     // Play intro music instead of gameplay music
     audioManager.playIntroMusic();
-    const introSound = (game as any)._sounds[AUDIO_KEYS.MUSIC_INTRO];
+    const introSound = mockSounds(game)[AUDIO_KEYS.MUSIC_INTRO];
 
     audioManager.updateGameplayMusicSpeed(120, BASE, MAX);
 
@@ -234,28 +262,26 @@ describe('AudioManager — updateGameplayMusicSpeed', () => {
   // Validates: Requirements 5.7
   it('NaN/undefined/Infinity belt speed uses baseBeltSpeed fallback', () => {
     audioManager.playGameplayMusic();
-    const factorySound = (game as any)._sounds[AUDIO_KEYS.MUSIC_FACTORY];
+    const factorySound = mockSounds(game)[AUDIO_KEYS.MUSIC_FACTORY];
 
     // NaN
     audioManager.updateGameplayMusicSpeed(NaN, BASE, MAX);
     expect(factorySound.setRate).toHaveBeenCalled();
-    let rate = (audioManager as any).currentRate;
-    // With baseBeltSpeed fallback, normalized = 0, target = 1.0
-    // After smoothing from 1.0 toward 1.0, rate stays at 1.0
+    let rate = internals(audioManager).currentRate;
     expect(rate).toBeCloseTo(GAMEPLAY_MUSIC_RATE_MIN, 2);
 
     // Infinity
     factorySound.setRate.mockClear();
     audioManager.updateGameplayMusicSpeed(Infinity, BASE, MAX);
     expect(factorySound.setRate).toHaveBeenCalled();
-    rate = (audioManager as any).currentRate;
+    rate = internals(audioManager).currentRate;
     expect(rate).toBeCloseTo(GAMEPLAY_MUSIC_RATE_MIN, 2);
 
     // undefined (cast to number)
     factorySound.setRate.mockClear();
     audioManager.updateGameplayMusicSpeed(undefined as unknown as number, BASE, MAX);
     expect(factorySound.setRate).toHaveBeenCalled();
-    rate = (audioManager as any).currentRate;
+    rate = internals(audioManager).currentRate;
     expect(rate).toBeCloseTo(GAMEPLAY_MUSIC_RATE_MIN, 2);
   });
 
@@ -268,7 +294,7 @@ describe('AudioManager — updateGameplayMusicSpeed', () => {
       audioManager.updateGameplayMusicSpeed(BASE, BASE, MAX);
     }
 
-    const rate = (audioManager as any).currentRate;
+    const rate = internals(audioManager).currentRate;
     expect(rate).toBeCloseTo(GAMEPLAY_MUSIC_RATE_MIN, 2);
   });
 
@@ -281,7 +307,7 @@ describe('AudioManager — updateGameplayMusicSpeed', () => {
       audioManager.updateGameplayMusicSpeed(MAX, BASE, MAX);
     }
 
-    const rate = (audioManager as any).currentRate;
+    const rate = internals(audioManager).currentRate;
     expect(rate).toBeCloseTo(GAMEPLAY_MUSIC_RATE_MAX, 1);
   });
 
@@ -293,7 +319,7 @@ describe('AudioManager — updateGameplayMusicSpeed', () => {
     for (let i = 0; i < 200; i++) {
       audioManager.updateGameplayMusicSpeed(-1000, BASE, MAX);
     }
-    let rate = (audioManager as any).currentRate;
+    let rate = internals(audioManager).currentRate;
     expect(rate).toBeGreaterThanOrEqual(GAMEPLAY_MUSIC_RATE_MIN);
     expect(rate).toBeLessThanOrEqual(GAMEPLAY_MUSIC_RATE_MAX);
 
@@ -301,7 +327,7 @@ describe('AudioManager — updateGameplayMusicSpeed', () => {
     for (let i = 0; i < 200; i++) {
       audioManager.updateGameplayMusicSpeed(99999, BASE, MAX);
     }
-    rate = (audioManager as any).currentRate;
+    rate = internals(audioManager).currentRate;
     expect(rate).toBeGreaterThanOrEqual(GAMEPLAY_MUSIC_RATE_MIN);
     expect(rate).toBeLessThanOrEqual(GAMEPLAY_MUSIC_RATE_MAX);
   });
