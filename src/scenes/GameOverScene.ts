@@ -40,6 +40,8 @@ export class GameOverScene extends Phaser.Scene {
   create(): void {
     this.layoutSystem.update(this.scale.width, this.scale.height);
 
+    // Remove previous resize listener to avoid stacking on restart
+    this.scale.off('resize');
     this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
       this.layoutSystem.update(gameSize.width, gameSize.height);
       this.repositionNameInput();

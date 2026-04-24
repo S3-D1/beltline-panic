@@ -51,8 +51,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Reset runtime state — field initializers only run in the constructor,
+    // but scene.start() re-invokes create() without re-constructing.
+    this.gameOver = false;
+    this.collidedItems = null;
+    this.blinkTimer = 0;
+    this.beltOffset = 0;
+    this.terminalMode = false;
+    this.prevInteractionState = 'idle';
+
     this.layoutSystem.update(this.scale.width, this.scale.height);
 
+    // Remove previous resize listener to avoid stacking on restart
+    this.scale.off('resize');
     this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
       this.layoutSystem.update(gameSize.width, gameSize.height);
 
