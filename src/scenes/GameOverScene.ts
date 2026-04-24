@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { LayoutSystem } from '../systems/LayoutSystem';
 import { ScoreStorage, isAllowedChar } from '../utils/ScoreStorage';
 import { PALETTE } from '../rendering/Palette';
+import { AudioManager } from '../systems/AudioManager';
+import { MuteButtonUI } from '../ui/MuteButtonUI';
 
 /** Convert a numeric hex color (0xRRGGBB) to a CSS hex string (#RRGGBB). */
 function hexColor(value: number): string {
@@ -17,6 +19,8 @@ export class GameOverScene extends Phaser.Scene {
   private finalScore: number = 0;
   private currentName: string = '';
   private savedTimestamp: number | null = null;
+  private audioManager!: AudioManager;
+  private muteButton!: MuteButtonUI;
 
   // Name Input UI text objects
   private titleText: Phaser.GameObjects.Text | null = null;
@@ -40,12 +44,23 @@ export class GameOverScene extends Phaser.Scene {
   create(): void {
     this.layoutSystem.update(this.scale.width, this.scale.height);
 
+    // Audio: get AudioManager and play game-over stinger
+    this.audioManager = this.game.audioManager as AudioManager;
+    this.audioManager.playGameOverStinger();
+
+    // Create mute button UI — handles both click and M key
+    if (this.muteButton) {
+      this.muteButton.destroy();
+    }
+    this.muteButton = new MuteButtonUI(this, this.layoutSystem);
+
     // Remove previous resize listener to avoid stacking on restart
     this.scale.off('resize');
     this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
       this.layoutSystem.update(gameSize.width, gameSize.height);
       this.repositionNameInput();
       this.repositionScoreboard();
+      this.muteButton.resize(this.layoutSystem);
     });
 
     // Initialize phase state
@@ -118,6 +133,9 @@ export class GameOverScene extends Phaser.Scene {
   /** Handle individual key presses during name input. */
   private handleKeyInput(event: KeyboardEvent): void {
     if (this.phase !== 'nameInput') return;
+
+    // M key is reserved for mute toggle — do not treat as name input
+    if (event.key === 'm' || event.key === 'M') return;
 
     if (event.key === 'Enter') {
       if (this.currentName.length > 0) {
@@ -210,6 +228,9 @@ export class GameOverScene extends Phaser.Scene {
 
   /** Scoreboard phase: display ranked scores and highlight the just-saved entry. */
   private showScoreboard(): void {
+    // Switch to scoreboard music
+    this.audioManager.playScoreboardMusic();
+
     // Destroy name input UI elements
     if (this.titleText) { this.titleText.destroy(); this.titleText = null; }
     if (this.scoreDisplayText) { this.scoreDisplayText.destroy(); this.scoreDisplayText = null; }
@@ -335,12 +356,22 @@ export class GameOverScene extends Phaser.Scene {
 
   /** Set up any-key / tap listeners for restarting. */
   private setupRestartListeners(): void {
-    this.input.keyboard!.once('keydown', this.startNewRun, this);
+    this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
+      if (event.key === 'm' || event.key === 'M') return;
+      this.input.keyboard!.removeAllListeners('keydown');
+      this.startNewRun();
+    }, this);
     this.input.once('pointerdown', this.startNewRun, this);
   }
 
   /** Transition to a fresh GameScene run. */
   private startNewRun(): void {
     this.scene.start('GameScene');
+  }
+
+  update(): void {
+    if (this.muteButton) {
+      this.muteButton.update();
+    }
   }
 }

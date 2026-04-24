@@ -10,12 +10,15 @@ import { LayoutSystem } from '../systems/LayoutSystem';
 import { GameManager } from '../systems/GameManager';
 import { AutomationSystem } from '../systems/AutomationSystem';
 import { TerminalUI } from '../ui/TerminalUI';
+import { AudioManager } from '../systems/AudioManager';
+import { MuteButtonUI } from '../ui/MuteButtonUI';
 import { drawFloor } from '../rendering/FloorDrawing';
 import { drawBelt } from '../rendering/BeltDrawing';
 import { drawTerminal } from '../rendering/TerminalDrawing';
 import { drawMachines } from '../rendering/MachineDrawing';
 import { drawItems } from '../rendering/ItemDrawing';
 import { PALETTE } from '../rendering/Palette';
+import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
@@ -45,6 +48,8 @@ export class GameScene extends Phaser.Scene {
   private beltGraphics!: Phaser.GameObjects.Graphics;
   private terminalGraphics!: Phaser.GameObjects.Graphics;
   private prevInteractionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled' = 'idle';
+  private audioManager!: AudioManager;
+  private muteButton!: MuteButtonUI;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -87,6 +92,9 @@ export class GameScene extends Phaser.Scene {
       // Pass updated layout to UI components
       if (this.touchButtonUI) {
         this.touchButtonUI.resize(this.layoutSystem);
+      }
+      if (this.muteButton) {
+        this.muteButton.resize(this.layoutSystem);
       }
     });
 
@@ -144,6 +152,16 @@ export class GameScene extends Phaser.Scene {
         color: '#00ff00',
       },
     ).setOrigin(1, 0);
+
+    // Audio: get AudioManager and play gameplay music
+    this.audioManager = this.game.audioManager as AudioManager;
+    this.audioManager.playGameplayMusic();
+
+    // Mute button UI (bottom-right corner) — handles both click and M key
+    if (this.muteButton) {
+      this.muteButton.destroy();
+    }
+    this.muteButton = new MuteButtonUI(this, this.layoutSystem);
 
   }
 
@@ -216,6 +234,7 @@ export class GameScene extends Phaser.Scene {
 
       for (const val of result.exitedValues) {
         this.gameManager.addPayout(val);
+        this.audioManager.playScore();
       }
       this.updateScoreDisplay();
 
@@ -261,6 +280,14 @@ export class GameScene extends Phaser.Scene {
           }
         }
 
+        // SFX triggers — detect state transitions before updateSequenceUI overwrites prevInteractionState
+        if (this.prevInteractionState !== 'success' && machineResult.interactionState === 'success') {
+          this.audioManager.playMachineUse();
+        }
+        if (this.prevInteractionState !== 'failed' && machineResult.interactionState === 'failed') {
+          this.audioManager.playError();
+        }
+
         // Update SequenceInputUI based on interaction state changes
         this.updateSequenceUI(machineResult.interactionState);
       }
@@ -276,6 +303,13 @@ export class GameScene extends Phaser.Scene {
       for (const item of autoProcessedItems) {
         this.itemSystem.getItems().push(item);
       }
+
+      // Update gameplay music speed based on current belt speed
+      this.audioManager.updateGameplayMusicSpeed(
+        this.gameManager.getBeltSpeed(),
+        DELIVERY_CONFIG.initialBeltSpeed,
+        DELIVERY_CONFIG.maxBeltSpeed,
+      );
     } else {
       this.blinkTimer += delta;
     }
@@ -298,6 +332,9 @@ export class GameScene extends Phaser.Scene {
       playerSize,
       playerSize,
     );
+
+    // Sync mute button label with actual mute state
+    this.muteButton.update();
   }
 
   private updateSequenceUI(interactionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled'): void {
