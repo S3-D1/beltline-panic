@@ -8,7 +8,14 @@ const LAYOUT = {
   BELT_Y: 150,
   BELT_W: 400,
   BELT_H: 300,
+  CENTER_Y: 300,
+  STATION_H: 40,
 } as const;
+
+// Derived constants matching ConveyorConfig
+const INLET_Y = LAYOUT.BELT_Y + (LAYOUT.CENTER_Y - LAYOUT.BELT_Y) / 2;   // 225
+const OUTLET_Y = LAYOUT.CENTER_Y + (LAYOUT.BELT_Y + LAYOUT.BELT_H - LAYOUT.CENTER_Y) / 2; // 375
+const INLET_OUTLET_X = (LAYOUT.BELT_X - LAYOUT.STATION_H) / 2; // 80
 
 
 
@@ -36,9 +43,20 @@ function evalLayoutExpr(expr: string): number {
     'LAYOUT.BELT_Y': LAYOUT.BELT_Y,
     'LAYOUT.BELT_W': LAYOUT.BELT_W,
     'LAYOUT.BELT_H': LAYOUT.BELT_H,
+    'LAYOUT.CENTER_Y': LAYOUT.CENTER_Y,
+    'LAYOUT.STATION_H': LAYOUT.STATION_H,
   };
 
   let result = expr;
+  // Resolve local constants first
+  const localMap: Record<string, number> = {
+    'INLET_OUTLET_X': INLET_OUTLET_X,
+    'INLET_Y': INLET_Y,
+    'OUTLET_Y': OUTLET_Y,
+  };
+  for (const [key, val] of Object.entries(localMap)) {
+    result = result.replaceAll(key, String(val));
+  }
   for (const [key, val] of Object.entries(layoutMap)) {
     result = result.replaceAll(key, String(val));
   }
@@ -67,13 +85,15 @@ const waypoints = parseWaypointsFromSource();
 const inlet = parseInletFromSource();
 
 describe('ConveyorConfig — geometry', () => {
-  // Example 1: LOOP_WAYPOINTS has 4 points forming a closed rectangle matching LAYOUT constants
-  it('LOOP_WAYPOINTS has 4 points matching LAYOUT rectangle', () => {
-    expect(waypoints.length).toBe(4);
-    expect(waypoints[0]).toEqual({ x: 200, y: 150 });
-    expect(waypoints[1]).toEqual({ x: 600, y: 150 });
-    expect(waypoints[2]).toEqual({ x: 600, y: 450 });
-    expect(waypoints[3]).toEqual({ x: 200, y: 450 });
+  // Example 1: LOOP_WAYPOINTS has 6 points forming a closed loop with inlet/outlet junctions
+  it('LOOP_WAYPOINTS has 6 points matching LAYOUT rectangle with inlet/outlet junctions', () => {
+    expect(waypoints.length).toBe(6);
+    expect(waypoints[0]).toEqual({ x: 200, y: 225 });  // inlet junction
+    expect(waypoints[1]).toEqual({ x: 200, y: 150 });  // top-left
+    expect(waypoints[2]).toEqual({ x: 600, y: 150 });  // top-right
+    expect(waypoints[3]).toEqual({ x: 600, y: 450 });  // bottom-right
+    expect(waypoints[4]).toEqual({ x: 200, y: 450 });  // bottom-left
+    expect(waypoints[5]).toEqual({ x: 200, y: 375 });  // outlet junction
   });
 
   // Example 2: Waypoint traversal order is clockwise (signed area via shoelace formula)

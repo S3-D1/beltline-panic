@@ -1,14 +1,17 @@
 import {
   INLET_START,
   INLET_END,
+  ITEM_SIZE,
   ITEM_VALUES,
   COLLISION_THRESHOLD,
   MIN_BELT_SPACING,
+  LOOP_WAYPOINTS,
 } from '../data/ConveyorConfig';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 import { ConveyorSystem, ConveyorItem } from './ConveyorSystem';
 import { GameManager } from '../systems/GameManager';
 import { isSafeToRelease } from './SafeReleaseSystem';
+import { distance } from './SafeReleaseSystem';
 import { createSeededRandom } from '../utils/random';
 
 export interface UpdateResult {
@@ -20,7 +23,23 @@ export interface UpdateResult {
 const inletLength = Math.sqrt(
   (INLET_END.x - INLET_START.x) ** 2 + (INLET_END.y - INLET_START.y) ** 2,
 );
-const minInletSpacingProgress = MIN_BELT_SPACING / inletLength;
+
+/** Gate offset: the leading inlet item waits at 0.5*beltWidth + 0.5*itemSize
+ * back from the junction so it doesn't visually sit inside the loop.
+ * Belt width = 3 * ITEM_SIZE (matches BeltDrawing). */
+const BELT_WIDTH = ITEM_SIZE * 3;
+const GATE_OFFSET_PX = 0.5 * BELT_WIDTH + 0.5 * ITEM_SIZE; // 28px
+const GATE_PROGRESS = 1.0 - GATE_OFFSET_PX / inletLength;
+
+/** Queue spacing: consecutive inlet items are 1.1 * ITEM_SIZE apart (center to center). */
+const QUEUE_SPACING_PROGRESS = (1.1 * ITEM_SIZE) / inletLength;
+
+/** The point where the inlet enters the loop (waypoint 0). */
+const INLET_JUNCTION = LOOP_WAYPOINTS[0];
+
+/** Insecure distance: distance(inlet gate, waypoint 0) + 2.25 * ITEM_SIZE.
+ * The gate is GATE_OFFSET_PX back from the junction along the inlet. */
+const INLET_INSECURE_DISTANCE = GATE_OFFSET_PX + 2.25 * ITEM_SIZE;
 
 export class ItemSystem {
   private items: ConveyorItem[] = [];
@@ -43,7 +62,7 @@ export class ItemSystem {
         ? inletItems.reduce((min, item) => item.inletProgress < min.inletProgress ? item : min)
         : null;
 
-      if (rearmostItem && rearmostItem.inletProgress < minInletSpacingProgress) {
+      if (rearmostItem && rearmostItem.inletProgress < QUEUE_SPACING_PROGRESS) {
         // Inlet is full — trigger collision (game over)
         const newSpawn: ConveyorItem = {
           x: INLET_START.x,
@@ -86,16 +105,19 @@ export class ItemSystem {
 
     if (inletItemsBeforeAdvance.length > 0) {
       const leadingItem = inletItemsBeforeAdvance[0];
-      // If the leading item is at or near the junction, check belt safety
-      if (leadingItem.inletProgress >= 1.0 - 0.001) {
-        const beltEntryPoint = this.conveyor.getPositionOnLoop(0);
-        const beltItems = this.items.filter(
-          (other) => !other.onInlet && !other.onOutlet,
+      // If the leading item is at or near the gate, check belt safety
+      if (leadingItem.inletProgress >= GATE_PROGRESS - 0.001) {
+        // Check if any loop item is too close to the inlet junction
+        const loopItems = this.items.filter(
+          (other) => other !== leadingItem && !other.onInlet && !other.onOutlet,
         );
-        if (!isSafeToRelease(beltEntryPoint, beltItems, MIN_BELT_SPACING)) {
-          // Unsafe — clamp at junction so conveyor.update() won't transition it
-          leadingItem.inletProgress = 0.999;
-          const pos = this.conveyor.getPositionOnInlet(1.0);
+        const tooClose = loopItems.some((item) => {
+          return distance(item, INLET_JUNCTION) < INLET_INSECURE_DISTANCE;
+        });
+        if (tooClose) {
+          // Unsafe — clamp at gate position
+          leadingItem.inletProgress = GATE_PROGRESS;
+          const pos = this.conveyor.getPositionOnInlet(GATE_PROGRESS);
           leadingItem.x = pos.x;
           leadingItem.y = pos.y;
         }
@@ -120,21 +142,23 @@ export class ItemSystem {
 
       for (let i = 0; i < justTransitioned.length; i++) {
         const item = justTransitioned[i];
-        // For the first item, check safety against existing belt items (excluding itself)
-        // For subsequent items, always revert (only one transition per frame)
         if (i === 0) {
-          const beltItems = this.items.filter(
+          // Check safety: no loop item too close to junction
+          const loopItems = this.items.filter(
             (other) => other !== item && !other.onInlet && !other.onOutlet,
           );
-          if (isSafeToRelease(beltEntryPoint, beltItems, MIN_BELT_SPACING)) {
+          const tooClose = loopItems.some((other) => {
+            return distance(other, INLET_JUNCTION) < INLET_INSECURE_DISTANCE;
+          });
+          if (!tooClose) {
             continue; // safe — keep this one on the belt
           }
         }
-        // Revert back to inlet at junction
+        // Revert back to inlet at gate position
         item.onInlet = true;
-        item.inletProgress = 1.0;
+        item.inletProgress = GATE_PROGRESS;
         item.loopProgress = 0;
-        const pos = this.conveyor.getPositionOnInlet(1.0);
+        const pos = this.conveyor.getPositionOnInlet(GATE_PROGRESS);
         item.x = pos.x;
         item.y = pos.y;
       }
@@ -148,8 +172,8 @@ export class ItemSystem {
     for (let i = 0; i < inletItemsAfterAdvance.length - 1; i++) {
       const leadItem = inletItemsAfterAdvance[i];
       const trailingItem = inletItemsAfterAdvance[i + 1];
-      if (leadItem.inletProgress - trailingItem.inletProgress < minInletSpacingProgress) {
-        trailingItem.inletProgress = leadItem.inletProgress - minInletSpacingProgress;
+      if (leadItem.inletProgress - trailingItem.inletProgress < QUEUE_SPACING_PROGRESS) {
+        trailingItem.inletProgress = leadItem.inletProgress - QUEUE_SPACING_PROGRESS;
         const pos = this.conveyor.getPositionOnInlet(trailingItem.inletProgress);
         trailingItem.x = pos.x;
         trailingItem.y = pos.y;
@@ -174,6 +198,13 @@ export class ItemSystem {
         const b = this.items[j];
         // Skip collision checks between two inlet items
         if (a.onInlet && b.onInlet) continue;
+        // Skip collision between a waiting inlet item and a loop item near the junction
+        if (a.onInlet && a.inletProgress >= GATE_PROGRESS - 0.01 && !b.onInlet && !b.onOutlet) {
+          if (distance(b, INLET_JUNCTION) < INLET_INSECURE_DISTANCE) continue;
+        }
+        if (b.onInlet && b.inletProgress >= GATE_PROGRESS - 0.01 && !a.onInlet && !a.onOutlet) {
+          if (distance(a, INLET_JUNCTION) < INLET_INSECURE_DISTANCE) continue;
+        }
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
