@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { InputSystem, LAYOUT } from '../systems/InputSystem';
 import { ConveyorSystem, ConveyorItem } from '../systems/ConveyorSystem';
 import { ItemSystem } from '../systems/ItemSystem';
-import { ITEM_COLORS, INLET_START, INLET_END, OUTLET_START, OUTLET_END, ITEM_SIZE } from '../data/ConveyorConfig';
 import { MachineSystem } from '../systems/MachineSystem';
 import { SequenceInputUI } from '../ui/SequenceInputUI';
 import { ActionLayer } from '../systems/ActionLayer';
@@ -11,6 +10,12 @@ import { LayoutSystem } from '../systems/LayoutSystem';
 import { GameManager } from '../systems/GameManager';
 import { AutomationSystem } from '../systems/AutomationSystem';
 import { TerminalUI } from '../ui/TerminalUI';
+import { drawFloor } from '../rendering/FloorDrawing';
+import { drawBelt } from '../rendering/BeltDrawing';
+import { drawTerminal } from '../rendering/TerminalDrawing';
+import { drawMachines } from '../rendering/MachineDrawing';
+import { drawItems } from '../rendering/ItemDrawing';
+import { PALETTE } from '../rendering/Palette';
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
@@ -25,6 +30,7 @@ export class GameScene extends Phaser.Scene {
   private gameOverText!: Phaser.GameObjects.Text;
   private collidedItems: [ConveyorItem, ConveyorItem] | null = null;
   private blinkTimer: number = 0;
+  private beltOffset: number = 0;
 
   private automationSystem!: AutomationSystem;
   private terminalUI!: TerminalUI;
@@ -36,7 +42,9 @@ export class GameScene extends Phaser.Scene {
   private touchButtonUI!: TouchButtonUI;
   private layoutSystem: LayoutSystem = new LayoutSystem();
   private layoutGraphics!: Phaser.GameObjects.Graphics;
-  private movementAreaGraphics!: Phaser.GameObjects.Graphics;
+  private floorGraphics!: Phaser.GameObjects.Graphics;
+  private beltGraphics!: Phaser.GameObjects.Graphics;
+  private terminalGraphics!: Phaser.GameObjects.Graphics;
   private prevInteractionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled' = 'idle';
 
   constructor() {
@@ -78,6 +86,14 @@ export class GameScene extends Phaser.Scene {
         this.touchButtonUI.resize(this.layoutSystem);
       }
     });
+
+    // Create floor graphics at lowest depth, belt graphics slightly above
+    this.floorGraphics = this.add.graphics();
+    this.floorGraphics.setDepth(-2);
+    this.beltGraphics = this.add.graphics();
+    this.beltGraphics.setDepth(-1);
+    this.terminalGraphics = this.add.graphics();
+    this.terminalGraphics.setDepth(0);
 
     this.drawLayout();
     this.actionLayer = new ActionLayer(this);
@@ -200,6 +216,10 @@ export class GameScene extends Phaser.Scene {
       // Advance delivery progression (spawn interval, belt speed) before systems tick
       this.gameManager.update(delta);
 
+      // Advance belt animation offset proportional to belt speed
+      const segmentSpacing = 20; // base-resolution pixels per segment
+      this.beltOffset += (this.gameManager.getBeltSpeed() / 1000) * (delta / 1000) * (1 / segmentSpacing);
+
       const result = this.itemSystem.update(delta, this.gameManager);
 
       for (const val of result.exitedValues) {
@@ -268,13 +288,18 @@ export class GameScene extends Phaser.Scene {
       this.blinkTimer += delta;
     }
 
+    // Per-frame rendering (back-to-front): Belt → Terminal → Machines → Items → Player
+    // Floor is static and only redrawn on resize in drawLayout()
+    drawBelt({ graphics: this.beltGraphics, layoutSystem: this.layoutSystem, beltOffset: this.beltOffset, gameOver: this.gameOver });
+    this.terminalGraphics.clear();
+    drawTerminal({ graphics: this.terminalGraphics, layoutSystem: this.layoutSystem, playerPosition: this.inputSystem.getPlayerPosition() });
     this.renderMachines();
     this.renderItems();
     // Player rendering
     const { x, y } = this.inputSystem.getPlayerCoords();
     const playerSize = this.layoutSystem.scaleValue(40);
     this.playerGraphic.clear();
-    this.playerGraphic.fillStyle(0xff0000, 1);
+    this.playerGraphic.fillStyle(PALETTE.PLAYER, 1);
     this.playerGraphic.fillRect(
       this.layoutSystem.scaleX(x) - playerSize / 2,
       this.layoutSystem.scaleY(y) - playerSize / 2,
@@ -317,64 +342,17 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.layoutGraphics = this.add.graphics();
     }
-    if (this.movementAreaGraphics) {
-      this.movementAreaGraphics.clear();
-    } else {
-      this.movementAreaGraphics = this.add.graphics();
-    }
 
-    const g = this.layoutGraphics;
     const ls = this.layoutSystem;
 
-    // ConveyorBelt — dark unfilled rectangular loop
-    g.lineStyle(ls.scaleValue(LAYOUT.BELT_THICKNESS), 0x333333, 1);
-    g.strokeRect(
-      ls.scaleX(LAYOUT.BELT_X),
-      ls.scaleY(LAYOUT.BELT_Y),
-      ls.scaleValue(LAYOUT.BELT_W),
-      ls.scaleValue(LAYOUT.BELT_H),
-    );
+    // Floor — walkable/non-walkable distinction (replaces old movementAreaGraphics)
+    drawFloor({ graphics: this.floorGraphics, layoutSystem: ls });
 
-    // Inlet line — horizontal segment feeding into the belt loop
-    g.lineStyle(ls.scaleValue(LAYOUT.BELT_THICKNESS), 0x333333, 1);
-    g.lineBetween(
-      ls.scaleX(INLET_START.x), ls.scaleY(INLET_START.y),
-      ls.scaleX(INLET_END.x), ls.scaleY(INLET_END.y),
-    );
+    // Belt — static redraw on create/resize (animated per-frame in update via task 8.6)
+    drawBelt({ graphics: this.beltGraphics, layoutSystem: ls, beltOffset: this.beltOffset, gameOver: this.gameOver });
 
-    // Outlet line — horizontal segment leaving the belt loop
-    g.lineStyle(ls.scaleValue(LAYOUT.BELT_THICKNESS), 0x333333, 1);
-    g.lineBetween(
-      ls.scaleX(OUTLET_START.x), ls.scaleY(OUTLET_START.y),
-      ls.scaleX(OUTLET_END.x), ls.scaleY(OUTLET_END.y),
-    );
-
-    // Left — UpgradeTerminal (static, not a machine)
-    g.fillStyle(0x4488ff, 1);
-    g.fillRect(
-      ls.scaleX(LAYOUT.BELT_X - LAYOUT.STATION_H),
-      ls.scaleY(LAYOUT.CENTER_Y - LAYOUT.STATION_H / 2),
-      ls.scaleValue(LAYOUT.STATION_H),
-      ls.scaleValue(LAYOUT.STATION_W),
-    );
-
-    // MovementArea — lightly tinted cross
-    const ma = this.movementAreaGraphics;
-    ma.fillStyle(0xffffff, 0.08);
-    const ns = ls.scaleValue(LAYOUT.NODE_SIZE);
-    const off = ls.scaleValue(LAYOUT.NODE_OFFSET);
-    const cx = ls.scaleX(LAYOUT.CENTER_X);
-    const cy = ls.scaleY(LAYOUT.CENTER_Y);
-    // Center node
-    ma.fillRect(cx - ns / 2, cy - ns / 2, ns, ns);
-    // Up node
-    ma.fillRect(cx - ns / 2, cy - off - ns / 2, ns, ns);
-    // Down node
-    ma.fillRect(cx - ns / 2, cy + off - ns / 2, ns, ns);
-    // Left node
-    ma.fillRect(cx - off - ns / 2, cy - ns / 2, ns, ns);
-    // Right node
-    ma.fillRect(cx + off - ns / 2, cy - ns / 2, ns, ns);
+    // Left — UpgradeTerminal (drawn via TerminalDrawing module)
+    drawTerminal({ graphics: this.terminalGraphics, layoutSystem: ls, playerPosition: this.inputSystem?.getPlayerPosition() ?? 'center' });
   }
 
   private enterGameOver(a: ConveyorItem, b: ConveyorItem): void {
@@ -391,86 +369,23 @@ export class GameScene extends Phaser.Scene {
 
   private renderMachines(): void {
     this.machineGraphics.clear();
-    const machines = this.machineSystem.getMachines();
-    const ls = this.layoutSystem;
-    const indicatorRadius = ls.scaleValue(6);
-
-    for (const machine of machines) {
-      // Yellow only for manual player interaction, blue otherwise
-      const isPlayerManual = this.machineSystem.isPlayerInteracting(machine.definition.id);
-      const color = isPlayerManual ? 0xffcc00 : 0x4488ff;
-      this.machineGraphics.fillStyle(color, 1);
-
-      // Activity indicator color: green if active, red otherwise
-      const indicatorColor = this.machineSystem.isActive(machine.definition.id)
-        ? 0x00ff00
-        : 0xff0000;
-
-      switch (machine.definition.playerPosition) {
-        case 'up': // Machine 1 — top
-          this.machineGraphics.fillRect(
-            ls.scaleX(LAYOUT.CENTER_X - LAYOUT.STATION_W / 2),
-            ls.scaleY(LAYOUT.BELT_Y - LAYOUT.STATION_H),
-            ls.scaleValue(LAYOUT.STATION_W),
-            ls.scaleValue(LAYOUT.STATION_H),
-          );
-          this.machineGraphics.fillStyle(indicatorColor, 1);
-          this.machineGraphics.fillCircle(
-            ls.scaleX(LAYOUT.CENTER_X + LAYOUT.STATION_W / 2) - indicatorRadius,
-            ls.scaleY(LAYOUT.BELT_Y - LAYOUT.STATION_H) + indicatorRadius,
-            indicatorRadius,
-          );
-          break;
-        case 'right': // Machine 2 — right
-          this.machineGraphics.fillRect(
-            ls.scaleX(LAYOUT.BELT_X + LAYOUT.BELT_W),
-            ls.scaleY(LAYOUT.CENTER_Y - LAYOUT.STATION_H / 2),
-            ls.scaleValue(LAYOUT.STATION_H),
-            ls.scaleValue(LAYOUT.STATION_W),
-          );
-          this.machineGraphics.fillStyle(indicatorColor, 1);
-          this.machineGraphics.fillCircle(
-            ls.scaleX(LAYOUT.BELT_X + LAYOUT.BELT_W) + ls.scaleValue(LAYOUT.STATION_H) - indicatorRadius,
-            ls.scaleY(LAYOUT.CENTER_Y - LAYOUT.STATION_H / 2) + indicatorRadius,
-            indicatorRadius,
-          );
-          break;
-        case 'down': // Machine 3 — bottom
-          this.machineGraphics.fillRect(
-            ls.scaleX(LAYOUT.CENTER_X - LAYOUT.STATION_W / 2),
-            ls.scaleY(LAYOUT.BELT_Y + LAYOUT.BELT_H),
-            ls.scaleValue(LAYOUT.STATION_W),
-            ls.scaleValue(LAYOUT.STATION_H),
-          );
-          this.machineGraphics.fillStyle(indicatorColor, 1);
-          this.machineGraphics.fillCircle(
-            ls.scaleX(LAYOUT.CENTER_X + LAYOUT.STATION_W / 2) - indicatorRadius,
-            ls.scaleY(LAYOUT.BELT_Y + LAYOUT.BELT_H) + indicatorRadius,
-            indicatorRadius,
-          );
-          break;
-      }
-    }
+    drawMachines({
+      graphics: this.machineGraphics,
+      layoutSystem: this.layoutSystem,
+      machines: this.machineSystem.getMachines(),
+      machineSystem: this.machineSystem,
+    });
   }
 
   private renderItems(): void {
     this.itemGraphics.clear();
-    const items = this.itemSystem.getItems();
-    const scaledItemSize = this.layoutSystem.scaleValue(ITEM_SIZE);
-    for (const item of items) {
-      let color = ITEM_COLORS[item.state];
-      if (this.gameOver && this.collidedItems) {
-        if (item === this.collidedItems[0] || item === this.collidedItems[1]) {
-          color = Math.floor(this.blinkTimer / 300) % 2 === 0 ? 0xff0000 : ITEM_COLORS[item.state];
-        }
-      }
-      this.itemGraphics.fillStyle(color, 1);
-      this.itemGraphics.fillRect(
-        this.layoutSystem.scaleX(item.x) - scaledItemSize / 2,
-        this.layoutSystem.scaleY(item.y) - scaledItemSize / 2,
-        scaledItemSize,
-        scaledItemSize,
-      );
-    }
+    drawItems({
+      graphics: this.itemGraphics,
+      layoutSystem: this.layoutSystem,
+      items: this.itemSystem.getItems(),
+      gameOver: this.gameOver,
+      collidedItems: this.collidedItems,
+      blinkTimer: this.blinkTimer,
+    });
   }
 }

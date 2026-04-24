@@ -310,6 +310,8 @@ const LAYOUT_CONSTANTS = {
   BELT_Y: 150,
   BELT_W: 400,
   BELT_H: 300,
+  CENTER_Y: 300,
+  STATION_H: 40,
 } as const;
 
 function evalLayoutExprForProp10(expr: string): number {
@@ -318,9 +320,23 @@ function evalLayoutExprForProp10(expr: string): number {
     'LAYOUT.BELT_Y': LAYOUT_CONSTANTS.BELT_Y,
     'LAYOUT.BELT_W': LAYOUT_CONSTANTS.BELT_W,
     'LAYOUT.BELT_H': LAYOUT_CONSTANTS.BELT_H,
+    'LAYOUT.CENTER_Y': LAYOUT_CONSTANTS.CENTER_Y,
+    'LAYOUT.STATION_H': LAYOUT_CONSTANTS.STATION_H,
   };
 
   let result = expr;
+  // Also resolve local constants defined in ConveyorConfig
+  const INLET_OUTLET_X = (LAYOUT_CONSTANTS.BELT_X - LAYOUT_CONSTANTS.STATION_H) / 2;
+  const INLET_Y = LAYOUT_CONSTANTS.BELT_Y + (LAYOUT_CONSTANTS.CENTER_Y - LAYOUT_CONSTANTS.BELT_Y) / 2;
+  const OUTLET_Y = LAYOUT_CONSTANTS.CENTER_Y + (LAYOUT_CONSTANTS.BELT_Y + LAYOUT_CONSTANTS.BELT_H - LAYOUT_CONSTANTS.CENTER_Y) / 2;
+  const localMap: Record<string, number> = {
+    'INLET_OUTLET_X': INLET_OUTLET_X,
+    'INLET_Y': INLET_Y,
+    'OUTLET_Y': OUTLET_Y,
+  };
+  for (const [key, val] of Object.entries(localMap)) {
+    result = result.replaceAll(key, String(val));
+  }
   for (const [key, val] of Object.entries(layoutMap)) {
     result = result.replaceAll(key, String(val));
   }
