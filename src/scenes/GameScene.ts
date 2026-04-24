@@ -27,7 +27,6 @@ export class GameScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
   private budgetText!: Phaser.GameObjects.Text;
   private gameOver: boolean = false;
-  private gameOverText!: Phaser.GameObjects.Text;
   private collidedItems: [ConveyorItem, ConveyorItem] | null = null;
   private blinkTimer: number = 0;
   private beltOffset: number = 0;
@@ -73,13 +72,6 @@ export class GameScene extends Phaser.Scene {
         this.layoutSystem.scaleY(44),
       );
       this.budgetText?.setFontSize(this.layoutSystem.scaleFontSize(20));
-
-      // Reposition and resize game over text
-      this.gameOverText?.setPosition(
-        this.layoutSystem.scaleX(LAYOUT.CENTER_X),
-        this.layoutSystem.scaleY(LAYOUT.CENTER_Y),
-      );
-      this.gameOverText?.setFontSize(this.layoutSystem.scaleFontSize(48));
 
       // Pass updated layout to UI components
       if (this.touchButtonUI) {
@@ -142,17 +134,6 @@ export class GameScene extends Phaser.Scene {
       },
     ).setOrigin(1, 0);
 
-    // Game over text - centered, hidden initially
-    this.gameOverText = this.add.text(
-      this.layoutSystem.scaleX(LAYOUT.CENTER_X),
-      this.layoutSystem.scaleY(LAYOUT.CENTER_Y),
-      'Game Over',
-      {
-        fontFamily: 'monospace',
-        fontSize: `${this.layoutSystem.scaleFontSize(48)}px`,
-        color: '#ff0000',
-      },
-    ).setOrigin(0.5, 0.5).setVisible(false);
   }
 
   update(_time: number, delta: number): void {
@@ -358,8 +339,9 @@ export class GameScene extends Phaser.Scene {
   private enterGameOver(a: ConveyorItem, b: ConveyorItem): void {
     this.gameOver = true;
     this.collidedItems = [a, b];
-    this.gameOverText.setVisible(true);
-    this.scoreText.setColor('#ff0000');
+    this.time.delayedCall(500, () => {
+      this.scene.start('GameOverScene', { score: this.gameManager.getScore() });
+    });
   }
 
   private updateScoreDisplay(): void {
