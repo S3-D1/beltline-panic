@@ -4,13 +4,11 @@ import {
   ITEM_SIZE,
   ITEM_VALUES,
   COLLISION_THRESHOLD,
-  MIN_BELT_SPACING,
   LOOP_WAYPOINTS,
 } from '../data/ConveyorConfig';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 import { ConveyorSystem, ConveyorItem } from './ConveyorSystem';
 import { GameManager } from '../systems/GameManager';
-import { isSafeToRelease } from './SafeReleaseSystem';
 import { distance } from './SafeReleaseSystem';
 import { createSeededRandom } from '../utils/random';
 
@@ -137,8 +135,6 @@ export class ItemSystem {
     if (justTransitioned.length > 0) {
       // Sort by loopProgress so the most advanced one is "first"
       justTransitioned.sort((a, b) => a.loopProgress - b.loopProgress);
-
-      const beltEntryPoint = this.conveyor.getPositionOnLoop(0);
 
       for (let i = 0; i < justTransitioned.length; i++) {
         const item = justTransitioned[i];

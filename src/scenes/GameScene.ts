@@ -343,7 +343,6 @@ export class GameScene extends Phaser.Scene {
       this.layoutGraphics = this.add.graphics();
     }
 
-    const g = this.layoutGraphics;
     const ls = this.layoutSystem;
 
     // Floor — walkable/non-walkable distinction (replaces old movementAreaGraphics)
