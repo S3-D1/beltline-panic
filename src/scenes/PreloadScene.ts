@@ -17,6 +17,9 @@ export class PreloadScene extends Phaser.Scene {
     this.load.audio(AUDIO_KEYS.SFX_MACHINE_USE, 'assets/audio/sfx_machine_use.wav');
     this.load.audio(AUDIO_KEYS.SFX_SCORE, 'assets/audio/sfx_score.wav');
     this.load.audio(AUDIO_KEYS.SFX_ERROR, 'assets/audio/sfx_error.wav');
+    this.load.audio(AUDIO_KEYS.SFX_LEVEL_UP, 'assets/audio/sfx_level_up.wav');
+    this.load.audio(AUDIO_KEYS.SFX_PAYMENT, 'assets/audio/sfx_payment.wav');
+    this.load.audio(AUDIO_KEYS.SFX_WARNING, 'assets/audio/sfx_warning.wav');
 
     // Load image assets
     for (const [key, path] of Object.entries(ASSET_PATHS)) {

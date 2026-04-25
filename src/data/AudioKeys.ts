@@ -8,6 +8,9 @@ export const AUDIO_KEYS = {
   SFX_MACHINE_USE: 'sfx_machine_use',
   SFX_SCORE: 'sfx_score',
   SFX_ERROR: 'sfx_error',
+  SFX_LEVEL_UP: 'sfx_level_up',
+  SFX_PAYMENT: 'sfx_payment',
+  SFX_WARNING: 'sfx_warning',
 } as const;
 
 // --- Gameplay music rate constants ---

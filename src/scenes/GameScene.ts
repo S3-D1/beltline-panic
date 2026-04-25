@@ -11,6 +11,7 @@ import { GameManager } from '../systems/GameManager';
 import { AutomationSystem } from '../systems/AutomationSystem';
 import { TerminalUI } from '../ui/TerminalUI';
 import { AudioManager } from '../systems/AudioManager';
+import { FeedbackManager } from '../systems/FeedbackManager';
 import { MuteButtonUI } from '../ui/MuteButtonUI';
 import { drawFloor } from '../rendering/FloorDrawing';
 import { PATH_SEGMENTS, BELT_WIDTH } from '../rendering/BeltDrawing';
@@ -19,6 +20,7 @@ import { ASSET_KEYS, ITEM_STATE_ASSET } from '../data/AssetKeys';
 import { MACHINE_DEFINITIONS } from '../data/MachineConfig';
 import { ITEM_SIZE } from '../data/ConveyorConfig';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
+import { UPGRADE_DIRECTION_MAP } from '../data/UpgradeConfig';
 
 interface BeltSegmentSprite {
   tileSprite: Phaser.GameObjects.TileSprite;
@@ -76,6 +78,7 @@ export class GameScene extends Phaser.Scene {
   private terminalSprite!: Phaser.GameObjects.Sprite;
   private prevInteractionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled' = 'idle';
   private audioManager!: AudioManager;
+  private feedbackManager!: FeedbackManager;
   private muteButton!: MuteButtonUI;
 
   constructor() {
@@ -132,6 +135,11 @@ export class GameScene extends Phaser.Scene {
 
       // Reposition and rescale machine sprites
       this.resizeMachineSprites();
+
+      // Reposition FeedbackManager UI elements (Task 12.6)
+      if (this.feedbackManager) {
+        this.feedbackManager.handleResize();
+      }
     });
 
     // Create floor graphics at lowest depth
@@ -201,6 +209,32 @@ export class GameScene extends Phaser.Scene {
     }
     this.muteButton = new MuteButtonUI(this, this.layoutSystem);
 
+    // FeedbackManager — centralized feedback system (Task 12.1)
+    this.feedbackManager = new FeedbackManager(
+      this,
+      this.layoutSystem,
+      this.gameManager,
+      this.audioManager,
+    );
+    this.feedbackManager.init(this.budgetText, this.scoreText);
+
+    // Pass machine sprite references to FeedbackManager (mapped to MachineSpriteDef format)
+    this.feedbackManager.setMachineSprites(
+      this.machineSprites.map(ms => ({
+        sprite: ms.sprite,
+        machineId: ms.machineId,
+        baseX: ms.baseX,
+        baseY: ms.baseY,
+      })),
+    );
+
+    // Pass item sprite pool references to FeedbackManager (Task 12.5)
+    this.feedbackManager.setItemSpritePool(this.itemSpritePool);
+
+    // Wire TerminalUI to FeedbackManager (Task 12.1)
+    this.terminalUI.setFeedbackManager(this.feedbackManager);
+    this.terminalUI.setTerminalSprite(this.terminalSprite);
+
   }
 
   update(_time: number, delta: number): void {
@@ -220,6 +254,7 @@ export class GameScene extends Phaser.Scene {
         // Record budget before handling input to detect purchases
         const budgetBefore = this.gameManager.getBudget();
         const selectedMachineBefore = this.terminalUI.getSelectedMachineId();
+        const phaseBefore = this.terminalUI.getPhase();
 
         this.terminalUI.handleInput(direction, interact);
 
@@ -229,6 +264,24 @@ export class GameScene extends Phaser.Scene {
           const targetMachine = machines.find(m => m.definition.id === selectedMachineBefore);
           if (targetMachine) {
             this.gameManager.applyUpgrades(selectedMachineBefore, targetMachine);
+          }
+        }
+
+        // Detect insufficient budget: direction was pressed in upgrade-select phase,
+        // budget didn't change, and the upgrade is not at max level (Task 12.4, Req 5.5, 5.6)
+        if (
+          direction &&
+          phaseBefore === 'upgrade-select' &&
+          selectedMachineBefore &&
+          this.gameManager.getBudget() === budgetBefore
+        ) {
+          // Check if the attempted upgrade type is not at max (if it's at max, TerminalUI already handles it)
+          const upgradeType = UPGRADE_DIRECTION_MAP[direction];
+          if (upgradeType && !this.gameManager.isMaxLevel(selectedMachineBefore, upgradeType)) {
+            const cost = this.gameManager.getUpgradeCost(selectedMachineBefore, upgradeType);
+            if (this.gameManager.getBudget() < cost) {
+              this.feedbackManager.notifyInsufficientBudget(cost);
+            }
           }
         }
 
@@ -326,6 +379,15 @@ export class GameScene extends Phaser.Scene {
         }
         if (this.prevInteractionState !== 'failed' && machineResult.interactionState === 'failed') {
           this.audioManager.playError();
+
+          // Notify FeedbackManager about wrong input for hint display (Task 12.3)
+          const machines = this.machineSystem.getMachines();
+          const playerPos = this.inputSystem.getPlayerPosition();
+          const machineIdx = machines.findIndex(m => m.definition.playerPosition === playerPos);
+          if (machineIdx >= 0) {
+            this.feedbackManager.setWrongInput(machineIdx, true);
+            this.feedbackManager.showWrongItemFeedback(machineIdx);
+          }
         }
 
         // Update SequenceInputUI based on interaction state changes
@@ -344,12 +406,39 @@ export class GameScene extends Phaser.Scene {
         this.itemSystem.getItems().push(item);
       }
 
+      // Automation feedback: "Auto" floating text + warning sound on full machines (Task 13.1, Req 7.6, 8.5)
+      const machines = this.machineSystem.getMachines();
+      for (let mi = 0; mi < machines.length; mi++) {
+        const machine = machines[mi];
+        if (machine.autoProcessing) {
+          // Show "Auto" floating text in cyan near the machine (Req 7.6)
+          this.feedbackManager.showAutomationFloatingText(mi);
+
+          // Play warning sound when automation triggers on a full machine (Req 8.5)
+          if (machine.heldItems.length >= machine.capacity) {
+            this.audioManager.playWarning();
+          }
+        }
+      }
+
       // Update gameplay music speed based on current belt speed
       this.audioManager.updateGameplayMusicSpeed(
         this.gameManager.getBeltSpeed(),
         DELIVERY_CONFIG.initialBeltSpeed,
         DELIVERY_CONFIG.maxBeltSpeed,
       );
+
+      // FeedbackManager per-frame updates (Task 12.2)
+      this.feedbackManager.update(delta);
+      this.feedbackManager.renderStatusLights(this.machineSystem.getMachines());
+      this.feedbackManager.renderInteractionHints(
+        this.machineSystem.getMachines(),
+        this.inputSystem.getPlayerPosition(),
+        this.terminalMode,
+        delta,
+      );
+      this.feedbackManager.trackMachineTransitions(this.machineSystem.getMachines());
+      this.feedbackManager.trackItemTransitions(this.itemSystem.getItems());
     } else {
       this.blinkTimer += delta;
     }

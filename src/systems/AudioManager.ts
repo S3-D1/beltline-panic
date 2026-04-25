@@ -93,6 +93,18 @@ export class AudioManager {
     this.playSfx(AUDIO_KEYS.SFX_ERROR);
   }
 
+  playLevelUp(): void {
+    this.playSfx(AUDIO_KEYS.SFX_LEVEL_UP);
+  }
+
+  playPayment(): void {
+    this.playSfx(AUDIO_KEYS.SFX_PAYMENT);
+  }
+
+  playWarning(): void {
+    this.playSfx(AUDIO_KEYS.SFX_WARNING);
+  }
+
   // --- Mute control (implemented in task 2.4) ---
 
   setMuted(muted: boolean): void {
