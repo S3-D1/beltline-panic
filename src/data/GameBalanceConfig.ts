@@ -27,6 +27,12 @@ export interface GameBalanceConfig {
     baseCosts: Record<string, number>;
     costMultiplierPerLevel: number[];
   };
+
+  warmUp: {
+    warmUpEndSeconds: number;
+    transitionEndSeconds: number;
+    spawnIntervalMultiplier: number;
+  };
 }
 
 export const DEFAULT_GAME_BALANCE_CONFIG: GameBalanceConfig = {
@@ -65,5 +71,11 @@ export const DEFAULT_GAME_BALANCE_CONFIG: GameBalanceConfig = {
       1.0, 1.45, 2.1, 3.0, 4.3,
       6.1, 8.6, 12.0, 16.5, 22.5,
     ],
+  },
+
+  warmUp: {
+    warmUpEndSeconds: 15,
+    transitionEndSeconds: 45,
+    spawnIntervalMultiplier: 3.0,
   },
 };

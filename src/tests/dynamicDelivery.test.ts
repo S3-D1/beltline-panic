@@ -130,10 +130,10 @@ import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 describe('GameManager delivery API', () => {
   // --- Initial values match new adaptive difficulty system ---
 
-  it('initializes spawnIntervalMs from GameBalanceConfig', () => {
+  it('initializes spawnIntervalMs from GameBalanceConfig with warm-up multiplier', () => {
     const gm = new GameManager();
-    // At t=0, timeDifficulty=0, so spawnIntervalMs = startIntervalMs = 1450
-    expect(gm.getSpawnIntervalMs()).toBe(1450);
+    // At t=0, warm-up multiplier is 3.0, so effective interval = 1450 × 3.0 = 4350
+    expect(gm.getSpawnIntervalMs()).toBe(1450 * 3.0);
   });
 
   it('initializes beltSpeedFactor to 1.0', () => {

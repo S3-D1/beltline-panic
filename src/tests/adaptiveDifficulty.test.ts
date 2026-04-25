@@ -77,9 +77,10 @@ describe('Boundary values at t=0', () => {
     expect(gm.getBeltSpeedFactor()).toBe(1.0);
   });
 
-  it('spawnIntervalMs is 1450', () => {
+  it('spawnIntervalMs is 4350 (1450 × 3.0 warm-up multiplier)', () => {
     const gm = new GameManager();
-    expect(gm.getSpawnIntervalMs()).toBe(1450);
+    // At t=0, warm-up multiplier is 3.0, so effective interval = 1450 × 3.0 = 4350
+    expect(gm.getSpawnIntervalMs()).toBe(1450 * DEFAULT_GAME_BALANCE_CONFIG.warmUp.spawnIntervalMultiplier);
   });
 
   it('incomeMultiplier is 1.4', () => {
@@ -307,7 +308,8 @@ describe('startRun / resetRun', () => {
     expect(snap.overtimeDifficulty).toBe(0);
     expect(gm.isPanicMode()).toBe(false);
     expect(gm.getBeltSpeedFactor()).toBe(1.0);
-    expect(gm.getSpawnIntervalMs()).toBe(1450);
+    // At t=0, warm-up multiplier is 3.0, so effective interval = 1450 × 3.0 = 4350
+    expect(gm.getSpawnIntervalMs()).toBe(1450 * DEFAULT_GAME_BALANCE_CONFIG.warmUp.spawnIntervalMultiplier);
     expect(gm.getIncomeMultiplier()).toBeCloseTo(1.4, 5);
   });
 

@@ -25,6 +25,10 @@ export const ASSET_KEYS = {
   // Terminal
   TERMINAL_ACTIVE: 'terminal_active',
   TERMINAL_INACTIVE: 'terminal_inactive',
+
+  // Start screen
+  TITLE: 'title',
+  PRE_GAME: 'pre-game',
 } as const;
 
 export const ASSET_PATHS: Record<string, string> = {
@@ -41,6 +45,8 @@ export const ASSET_PATHS: Record<string, string> = {
   [ASSET_KEYS.WORKER_SIDE]: 'assets/worker_64_side.png',
   [ASSET_KEYS.TERMINAL_ACTIVE]: 'assets/terminal_active.png',
   [ASSET_KEYS.TERMINAL_INACTIVE]: 'assets/terminal_inactive.png',
+  [ASSET_KEYS.TITLE]: 'assets/title.png',
+  [ASSET_KEYS.PRE_GAME]: 'assets/pre-game.png',
 };
 
 // Item state → asset key mapping
