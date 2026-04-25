@@ -7,17 +7,19 @@ inclusion: always
 ## Repository layout
 - `src/scenes` for Phaser scenes
 - `src/systems` for gameplay systems
-- `src/objects` for game entities and interactables
 - `src/ui` for HUD and overlays
 - `src/data` for static gameplay config
+- `src/rendering` for drawing helpers and palette
 - `src/utils` for helpers
+- `src/types` for type declarations
+- `src/tests` for unit and property tests
 - `docs` for project documentation
 - `.github/workflows` for CI/CD
 
 ## Scene expectations
 Use a small scene model:
-- Boot
 - Preload
+- Start
 - Game
 - GameOver
 
@@ -29,9 +31,10 @@ Use simple, explicit systems such as:
 - ConveyorSystem
 - ItemSystem
 - MachineSystem
-- UpgradeSystem
-- EconomySystem
-- DifficultySystem
+- GameManager (economy, upgrades, difficulty)
+- AutomationSystem
+- FeedbackManager
+- AudioManager
 
 ## Input model
 The game has five actions:

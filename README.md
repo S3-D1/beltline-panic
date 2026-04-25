@@ -15,7 +15,7 @@
     <img src="https://img.shields.io/badge/Theme-Machines-3a86ff" alt="Theme Machines" />
   </a>
   <a href="#project-status">
-    <img src="https://img.shields.io/badge/Status-In%20Development-f4a261" alt="Project Status" />
+    <img src="https://img.shields.io/badge/Status-Released-32a333" alt="Project Status" />
   </a>
   <a href="#license">
     <img src="https://img.shields.io/badge/License-MIT-32a333" alt="License" />
@@ -72,7 +72,7 @@ Jam theme: **Machines**
 - **Move:** Arrow Keys / Touch
 - **Interact:** `Space` / Touch
 
-For details see [Input & Control Concept](./CONTROLS.md).
+For details see [Input & Control Concept](./docs/CONTROLS.md).
 
 ## Getting Started
 
@@ -87,7 +87,7 @@ For details see [Input & Control Concept](./CONTROLS.md).
 pnpm install
 ```
 
-```bach Run locally
+```bash
 pnpm dev
 ```
 
@@ -122,7 +122,7 @@ Additional documentation is provided within [/docs](./docs):
 
 ## Project Status
 
-In active development for Gamedev.js Jam 2026.
+Released for Gamedev.js Jam 2026.
 
 ## Play
 

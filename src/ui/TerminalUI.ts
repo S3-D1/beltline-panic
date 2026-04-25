@@ -5,10 +5,6 @@ import {
   UPGRADE_DIRECTION_MAP,
   MACHINE_DIRECTION_MAP,
   UPGRADE_CONFIG,
-  AUTOMATION_SPEED_TABLE,
-  CAPACITY_TABLE,
-  QUALITY_MODIFIER_TABLE,
-  AUTOMATION_LEVEL_TABLE,
 } from '../data/UpgradeConfig';
 import { GameManager } from '../systems/GameManager';
 import { LayoutSystem } from '../systems/LayoutSystem';
@@ -350,13 +346,4 @@ export class TerminalUI {
     this.uiElements.push(line);
   }
 
-  private getUpgradePreview(type: UpgradeType, currentLevel: number): string {
-    const nextLevel = currentLevel + 1;
-    switch (type) {
-      case 'speed': return `${AUTOMATION_SPEED_TABLE[currentLevel]}ms→${AUTOMATION_SPEED_TABLE[nextLevel]}ms`;
-      case 'capacity': return `${CAPACITY_TABLE[currentLevel]}→${CAPACITY_TABLE[nextLevel]} slots`;
-      case 'quality': return `${QUALITY_MODIFIER_TABLE[currentLevel].toFixed(2)}x→${QUALITY_MODIFIER_TABLE[nextLevel].toFixed(2)}x`;
-      case 'automation': return `${AUTOMATION_LEVEL_TABLE[currentLevel]}→${AUTOMATION_LEVEL_TABLE[nextLevel]} auto`;
-    }
-  }
 }

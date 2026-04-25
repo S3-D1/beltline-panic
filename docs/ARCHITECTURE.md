@@ -6,8 +6,8 @@ Keep the code simple, readable, and easy to change during the jam.
 ## Main Parts
 
 ### Scenes
-- `Boot`
 - `Preload`
+- `Start`
 - `Game`
 - `GameOver`
 
@@ -16,15 +16,18 @@ Keep the code simple, readable, and easy to change during the jam.
 - `ConveyorSystem`
 - `ItemSystem`
 - `MachineSystem`
-- `UpgradeSystem`
-- `EconomySystem`
-- `DifficultySystem`
+- `GameManager` (economy, upgrades, difficulty)
+- `AutomationSystem`
+- `FeedbackManager`
+- `AudioManager`
 
 ### Main Objects
-- `Player`
-- `Machine`
-- `Item`
-- `UpgradeTerminal`
+Game entities are represented as lightweight interfaces and state objects
+rather than dedicated classes:
+- Player — sprite managed by `GameScene`, position tracked by `InputSystem`
+- Machine — `MachineState` interface in `MachineConfig`, managed by `MachineSystem`
+- Item — `ConveyorItem` interface in `ConveyorSystem`, managed by `ItemSystem`
+- UpgradeTerminal — `TerminalUI` overlay, upgrade logic in `GameManager`
 
 ## Input States
 - `Navigation`
@@ -53,8 +56,13 @@ Static game data should be stored in simple config objects:
 src/
   scenes/
   systems/
-  objects/
   ui/
   data/
+  rendering/
   utils/
+  types/
+  tests/
 docs/
+public/
+  assets/
+```
