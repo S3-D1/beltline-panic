@@ -1,7 +1,47 @@
-import { UPGRADE_CONFIG, UpgradeType } from '../data/UpgradeConfig';
-import { MachineState, MACHINE_DEFAULTS } from '../data/MachineConfig';
+import {
+  UPGRADE_CONFIG,
+  UpgradeType,
+  CAPACITY_TABLE,
+  SEQUENCE_LENGTH_TABLE,
+  AUTOMATION_LEVEL_TABLE,
+  QUALITY_MODIFIER_TABLE,
+  AUTOMATION_SPEED_TABLE,
+} from '../data/UpgradeConfig';
+import { MachineState } from '../data/MachineConfig';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 import { evaluateCurve } from '../utils/progression';
+
+export interface MachineValueConfig {
+  machineId: string;
+  baseValue: number;
+  factor: number;
+  qualityScalingMode: 'baseValue' | 'factor';
+  costBasePrice: number;
+}
+
+export const MACHINE_VALUE_CONFIGS: readonly MachineValueConfig[] = [
+  {
+    machineId: 'machine1',
+    baseValue: 10,
+    factor: 1.0,
+    qualityScalingMode: 'baseValue',
+    costBasePrice: 50,
+  },
+  {
+    machineId: 'machine2',
+    baseValue: 25,
+    factor: 1.5,
+    qualityScalingMode: 'factor',
+    costBasePrice: 250,
+  },
+  {
+    machineId: 'machine3',
+    baseValue: 50,
+    factor: 2.0,
+    qualityScalingMode: 'factor',
+    costBasePrice: 1000,
+  },
+] as const;
 
 export interface UpgradeLevels {
   capacity: number;
@@ -95,10 +135,11 @@ export class GameManager {
     this.budget += value;
   }
 
-  /** Calculate cost for next upgrade: basePrices[machineId] * 2^currentLevel */
+  /** Calculate cost for next upgrade: costBasePrice * 2^currentLevel */
   getUpgradeCost(machineId: string, type: UpgradeType): number {
     const currentLevel = this.upgradeLevels[machineId][type];
-    return UPGRADE_CONFIG.basePrices[machineId] * Math.pow(2, currentLevel);
+    const config = this.getMachineValueConfig(machineId);
+    return config.costBasePrice * Math.pow(2, currentLevel);
   }
 
   /** Attempt purchase. Returns true if successful. */
@@ -119,15 +160,49 @@ export class GameManager {
   /** Apply current upgrade levels to a MachineState */
   applyUpgrades(machineId: string, machine: MachineState): void {
     const levels = this.upgradeLevels[machineId];
-    machine.capacity = MACHINE_DEFAULTS.capacity + levels.capacity * UPGRADE_CONFIG.capacityIncrement;
-    machine.workQuality = MACHINE_DEFAULTS.workQuality + levels.quality * UPGRADE_CONFIG.qualityIncrement;
-    machine.requiredSequenceLength = MACHINE_DEFAULTS.requiredSequenceLength + levels.quality * UPGRADE_CONFIG.sequenceLengthIncrement;
-    machine.automationLevel = levels.automation * UPGRADE_CONFIG.automationIncrement;
+    const config = this.getMachineValueConfig(machineId);
+
+    machine.capacity = CAPACITY_TABLE[levels.capacity];
+    machine.requiredSequenceLength = SEQUENCE_LENGTH_TABLE[levels.quality];
+    machine.automationLevel = AUTOMATION_LEVEL_TABLE[levels.automation];
+
+    const qualityModifier = QUALITY_MODIFIER_TABLE[levels.quality];
+    if (config.qualityScalingMode === 'baseValue') {
+      machine.workQuality = config.baseValue * qualityModifier;
+    } else {
+      machine.workQuality = config.factor * qualityModifier;
+    }
   }
 
   /** Get automation timing for a machine in ms */
   getAutomationTiming(machineId: string): number {
     const speedLevel = this.upgradeLevels[machineId].speed;
-    return UPGRADE_CONFIG.automationBaseTimingMs - (speedLevel * UPGRADE_CONFIG.automationSpeedReductionMs);
+    return AUTOMATION_SPEED_TABLE[speedLevel];
+  }
+
+  /** Retrieve the MachineValueConfig for a given machine, or throw if not found */
+  getMachineValueConfig(machineId: string): MachineValueConfig {
+    const config = MACHINE_VALUE_CONFIGS.find(c => c.machineId === machineId);
+    if (!config) {
+      throw new Error(`No MachineValueConfig for machine: ${machineId}`);
+    }
+    return config;
+  }
+
+  /** Returns true when the given upgrade type on the given machine has reached max level */
+  isMaxLevel(machineId: string, type: UpgradeType): boolean {
+    return this.upgradeLevels[machineId][type] >= UPGRADE_CONFIG.maxLevel;
+  }
+
+  /** Returns true when the upgrade is not at max level and the budget covers the cost */
+  canPurchase(machineId: string, type: UpgradeType): boolean {
+    if (this.isMaxLevel(machineId, type)) return false;
+    return this.budget >= this.getUpgradeCost(machineId, type);
+  }
+
+  /** Returns the cost of the next upgrade, or null if already at max level */
+  getNextUpgradeCost(machineId: string, type: UpgradeType): number | null {
+    if (this.isMaxLevel(machineId, type)) return null;
+    return this.getUpgradeCost(machineId, type);
   }
 }
