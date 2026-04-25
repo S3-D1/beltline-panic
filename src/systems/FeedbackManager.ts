@@ -110,9 +110,6 @@ export class FeedbackManager {
   /** Persistent hint text objects, one per machine (indexed same as machineSpriteDefs) */
   private hintTexts: Phaser.GameObjects.Text[] = [];
 
-  /** Persistent hint text for the terminal */
-  private terminalHintText: Phaser.GameObjects.Text | null = null;
-
   /** Per-machine wrong-input timers in ms (counts down to auto-hide) */
   private wrongInputTimers: Map<number, number> = new Map();
 
@@ -423,17 +420,6 @@ export class FeedbackManager {
       this.hintTexts.push(hintText);
     }
 
-    // Create terminal hint text if not already created
-    if (!this.terminalHintText) {
-      this.terminalHintText = this.scene.add.text(0, 0, 'E: Upgrades', {
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        color: '#ffffff',
-      });
-      this.terminalHintText.setOrigin(0.5, 0.5);
-      this.terminalHintText.setDepth(6);
-      this.terminalHintText.setVisible(false);
-    }
   }
 
   // ── Wrong-input flag ───────────────────────────────────────────────
@@ -641,33 +627,6 @@ export class FeedbackManager {
       }
     }
 
-    // Terminal hint (Task 5.2, Req 4.6)
-    this.renderTerminalHint(playerPosition, terminalOpen);
-  }
-
-  /**
-   * Show or hide the terminal interaction hint.
-   * Visible when player is adjacent to terminal (position === 'left') and terminal is not open.
-   */
-  private renderTerminalHint(playerPosition: PlayerPosition, terminalOpen: boolean): void {
-    if (!this.terminalHintText) return;
-
-    if (playerPosition === 'left' && !terminalOpen) {
-      const ls = this.layoutSystem;
-      // Position near the terminal — use the known terminal base position
-      // Terminal is at BELT_X - STATION_H + STATION_H/2, CENTER_Y (from GameScene)
-      const terminalBaseX = 200 - 40 + 20; // 180 — matches GameScene.TERMINAL_BASE_X
-      const terminalBaseY = 300; // CENTER_Y
-      const screenX = ls.scaleX(terminalBaseX);
-      const screenY = ls.scaleY(terminalBaseY + HINT_OFFSET_Y);
-      const fontSize = ls.scaleFontSize(14);
-
-      this.terminalHintText.setPosition(screenX, screenY);
-      this.terminalHintText.setFontSize(fontSize);
-      this.terminalHintText.setVisible(true);
-    } else {
-      this.terminalHintText.setVisible(false);
-    }
   }
 
   // ── State transition tracking (Task 4.3, Req 3.4, 9.4) ────────────

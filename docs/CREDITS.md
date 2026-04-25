@@ -13,12 +13,4 @@
 - itch.io
 
 ## Assets
-Only the referenced Assets are used - thanks to all publishers and supporters!
-
-Todo: To fill during development
-
-- art
-- audio
-- fonts
-- plugins
-- reference material
+All the assets, visualisation aswell as audio is done by GPT Image 2.0 or GPT 5.5. Anything is generated and I gave my best to check that I don't be to close to existing assets.

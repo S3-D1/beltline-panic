@@ -27,13 +27,13 @@ describe('PreloadScene — image asset loading', () => {
   });
 
   // Validates: Requirements 1.1, 1.2
-  it('loads all 13 image assets with correct keys and paths', () => {
+  it('loads all 15 image assets with correct keys and paths', () => {
     // Simulate what PreloadScene.preload() does for image assets
     for (const [key, path] of Object.entries(ASSET_PATHS)) {
       mockLoader.image(key, path);
     }
 
-    expect(mockLoader.image).toHaveBeenCalledTimes(13);
+    expect(mockLoader.image).toHaveBeenCalledTimes(15);
 
     // Verify each asset key maps to the correct path
     for (const [key, path] of Object.entries(ASSET_PATHS)) {
@@ -42,15 +42,15 @@ describe('PreloadScene — image asset loading', () => {
   });
 
   // Validates: Requirements 1.2
-  it('ASSET_KEYS contains exactly 13 entries', () => {
+  it('ASSET_KEYS contains exactly 15 entries', () => {
     const keys = Object.values(ASSET_KEYS);
-    expect(keys).toHaveLength(13);
+    expect(keys).toHaveLength(15);
   });
 
   // Validates: Requirements 1.2
-  it('ASSET_PATHS contains exactly 13 entries', () => {
+  it('ASSET_PATHS contains exactly 15 entries', () => {
     const paths = Object.keys(ASSET_PATHS);
-    expect(paths).toHaveLength(13);
+    expect(paths).toHaveLength(15);
   });
 
   // Validates: Requirements 1.2
@@ -77,6 +77,8 @@ describe('PreloadScene — image asset loading', () => {
       'worker_64_side',
       'terminal_active',
       'terminal_inactive',
+      'title',
+      'pre-game',
     ];
 
     const actualKeys = Object.values(ASSET_KEYS);

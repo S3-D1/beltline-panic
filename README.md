@@ -48,7 +48,7 @@ Jam theme: **Machines**
 ## Gameplay Preview
 
 <p align="center">
-  <img src="./docs/images/gameplay.gif" alt="Beltline Panic gameplay preview" width="85%" />
+  <img src="./docs/images/gameplay.png" alt="Beltline Panic gameplay preview" width="85%" />
 </p>
 
 ## Features
@@ -79,20 +79,20 @@ For details see [Input & Control Concept](./CONTROLS.md).
 ### Requirements
 
 - Node.js
-- npm
+- pnpm
 
 ### Commands
 
 ```bash
-npm install
+pnpm install
 ```
 
 ```bach Run locally
-npm run dev
+pnpm dev
 ```
 
 ```bash Build
-npm run build
+pnpm build
 ```
 
 ## Documentation
@@ -117,8 +117,8 @@ Additional documentation is provided within [/docs](./docs):
 - [x] Machine interaction loop
 - [x] Upgrade system
 - [x] Automation progression
-- [ ] Difficulty scaling
-- [ ] Juice, UI, audio, and polish
+- [x] Difficulty scaling
+- [x] Juice, UI, audio, and polish
 
 ## Project Status
 

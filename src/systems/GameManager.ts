@@ -149,7 +149,11 @@ export class GameManager {
     const t = Math.pow(this.timeDifficulty, curveExponent);
     let interval = lerp(startIntervalMs, panicIntervalMs, t);
     interval -= this.overtimeDifficulty * 120;
-    return clamp(interval, minIntervalMs, startIntervalMs);
+
+    // Apply warm-up multiplier before clamp
+    interval *= this.getWarmUpMultiplier();
+
+    return clamp(interval, minIntervalMs, startIntervalMs * this.getWarmUpMultiplier());
   }
 
   /** Returns a randomized spawn delay based on current spawn interval */
@@ -165,6 +169,24 @@ export class GameManager {
     const { earlyIncomeMultiplier, earlyIncomeDurationSeconds } = this.config.economy;
     const t = clamp(this.elapsedSeconds / earlyIncomeDurationSeconds, 0, 1);
     return lerp(earlyIncomeMultiplier, 1.0, t);
+  }
+
+  /** Returns the warm-up spawn interval multiplier for the current elapsed time.
+   *  - 0..warmUpEndSeconds: spawnIntervalMultiplier (3.0)
+   *  - warmUpEndSeconds..transitionEndSeconds: linear interpolation from multiplier to 1.0
+   *  - transitionEndSeconds+: 1.0 (no effect)
+   */
+  getWarmUpMultiplier(): number {
+    const { warmUpEndSeconds, transitionEndSeconds, spawnIntervalMultiplier } = this.config.warmUp;
+    if (this.elapsedSeconds <= warmUpEndSeconds) {
+      return spawnIntervalMultiplier;
+    }
+    if (this.elapsedSeconds >= transitionEndSeconds) {
+      return 1.0;
+    }
+    // Linear interpolation from spawnIntervalMultiplier to 1.0
+    const t = (this.elapsedSeconds - warmUpEndSeconds) / (transitionEndSeconds - warmUpEndSeconds);
+    return spawnIntervalMultiplier - (spawnIntervalMultiplier - 1.0) * t;
   }
 
   /** Returns true when elapsed time has reached the panic threshold */

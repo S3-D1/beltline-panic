@@ -101,9 +101,13 @@ describe('Property 3: BeltSpeedFactor monotonicity and floor', () => {
 
 describe('Property 4: SpawnIntervalMs bounds and monotonicity', () => {
   /**
-   * Spawn interval must always be in [280, 1450] and monotonically non-increasing.
+   * Spawn interval must always be in [280, 1450 × warmUpMultiplier] and monotonically non-increasing.
+   * The warm-up multiplier scales the upper bound during the first 45 seconds.
    */
-  it('spawnIntervalMs is always in [280, 1450] and monotonically non-increasing', () => {
+  it('spawnIntervalMs is always in [280, 1450 × warmUpMultiplier] and monotonically non-increasing', () => {
+    const maxWarmUpInterval = DEFAULT_GAME_BALANCE_CONFIG.spawns.startIntervalMs
+      * DEFAULT_GAME_BALANCE_CONFIG.warmUp.spawnIntervalMultiplier; // 1450 × 3.0 = 4350
+
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 300_000, noNaN: true, noDefaultInfinity: true }),
@@ -120,9 +124,9 @@ describe('Property 4: SpawnIntervalMs bounds and monotonicity', () => {
           const interval2 = gm2.getSpawnIntervalMs();
 
           expect(interval1).toBeGreaterThanOrEqual(280);
-          expect(interval1).toBeLessThanOrEqual(1450);
+          expect(interval1).toBeLessThanOrEqual(maxWarmUpInterval);
           expect(interval2).toBeGreaterThanOrEqual(280);
-          expect(interval2).toBeLessThanOrEqual(1450);
+          expect(interval2).toBeLessThanOrEqual(maxWarmUpInterval);
           expect(interval2).toBeLessThanOrEqual(interval1 + 1e-9);
         },
       ),
