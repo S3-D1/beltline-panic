@@ -6,6 +6,11 @@ import {
   UPGRADE_CONFIG,
   MACHINE_DIRECTION_MAP,
   UPGRADE_DIRECTION_MAP,
+  AUTOMATION_SPEED_TABLE,
+  AUTOMATION_LEVEL_TABLE,
+  SEQUENCE_LENGTH_TABLE,
+  QUALITY_MODIFIER_TABLE,
+  CAPACITY_TABLE,
 } from '../data/UpgradeConfig';
 
 describe('GameManager — unit tests', () => {
@@ -31,17 +36,18 @@ describe('GameManager — unit tests', () => {
     expect(UPGRADE_CONFIG.basePrices['machine3']).toBe(1000);
   });
 
-  // Example 4: Config has all required fields
-  // Validates: Requirements 1.5, 18.1
-  it('config has all required fields', () => {
+  // Example 4: Config has all required fields and lookup tables are exported
+  // Validates: Requirements 1.1–1.5, 11.1
+  it('config has all required fields and lookup tables are exported', () => {
     expect(UPGRADE_CONFIG).toHaveProperty('basePrices');
     expect(UPGRADE_CONFIG).toHaveProperty('maxLevel');
-    expect(UPGRADE_CONFIG).toHaveProperty('capacityIncrement');
-    expect(UPGRADE_CONFIG).toHaveProperty('qualityIncrement');
-    expect(UPGRADE_CONFIG).toHaveProperty('sequenceLengthIncrement');
-    expect(UPGRADE_CONFIG).toHaveProperty('automationIncrement');
-    expect(UPGRADE_CONFIG).toHaveProperty('automationBaseTimingMs');
-    expect(UPGRADE_CONFIG).toHaveProperty('automationSpeedReductionMs');
+
+    // Verify lookup tables are exported and each has exactly 11 entries
+    expect(AUTOMATION_SPEED_TABLE).toHaveLength(11);
+    expect(AUTOMATION_LEVEL_TABLE).toHaveLength(11);
+    expect(SEQUENCE_LENGTH_TABLE).toHaveLength(11);
+    expect(QUALITY_MODIFIER_TABLE).toHaveLength(11);
+    expect(CAPACITY_TABLE).toHaveLength(11);
   });
 
   // Example 5: Machine direction map

@@ -514,8 +514,11 @@ describe('Upgrade effects on machine behavior', () => {
     gm.attemptPurchase('machine1', 'quality');
     gm.applyUpgrades('machine1', machine);
 
-    expect(machine.workQuality).toBeCloseTo(MACHINE_DEFAULTS.workQuality + 0.1);
-    expect(machine.requiredSequenceLength).toBe(MACHINE_DEFAULTS.requiredSequenceLength + 1);
+    // machine1 uses qualityScalingMode: 'baseValue' with baseValue: 10
+    // At quality level 1: workQuality = 10 * QUALITY_MODIFIER_TABLE[1] = 10 * 1.15 = 11.5
+    expect(machine.workQuality).toBeCloseTo(11.5);
+    // At quality level 1: requiredSequenceLength = SEQUENCE_LENGTH_TABLE[1] = 4
+    expect(machine.requiredSequenceLength).toBe(4);
   });
 
   it('automation upgrade sets automationLevel', () => {
