@@ -523,9 +523,18 @@ export class GameScene extends Phaser.Scene {
       const baseWidth = drawLen;
       const baseHeight = BELT_WIDTH;
 
-      // Determine rotation: vertical segments rotate 90° (π/2)
+      // Determine rotation based on segment direction:
+      // - Right-moving horizontal: 0
+      // - Left-moving horizontal: π (180°)
+      // - Down-moving vertical: π/2 (90°)
+      // - Up-moving vertical: 3π/2 (270°)
       const isVertical = seg.isVertical;
-      const rotation = isVertical ? Math.PI / 2 : 0;
+      let rotation: number;
+      if (isVertical) {
+        rotation = seg.dy > 0 ? Math.PI / 2 : (3 * Math.PI) / 2;
+      } else {
+        rotation = seg.dx > 0 ? 0 : Math.PI;
+      }
 
       // Create TileSprite at screen-scaled dimensions
       const screenWidth = ls.scaleValue(baseWidth);
@@ -540,6 +549,11 @@ export class GameScene extends Phaser.Scene {
       tileSprite.setOrigin(0.5, 0.5);
       tileSprite.setRotation(rotation);
       tileSprite.setDepth(-1);
+
+      // Uniform tile scale: fit texture height to belt width, preserve aspect ratio
+      const texFrame = this.textures.getFrame(ASSET_KEYS.BELT);
+      const tileScale = ls.scaleValue(baseHeight) / texFrame.height;
+      tileSprite.setTileScale(tileScale, tileScale);
 
       this.beltSegmentSprites.push({
         tileSprite,
@@ -558,11 +572,16 @@ export class GameScene extends Phaser.Scene {
    */
   private resizeBeltTileSprites(): void {
     const ls = this.layoutSystem;
+    const texFrame = this.textures.getFrame(ASSET_KEYS.BELT);
 
     for (const seg of this.beltSegmentSprites) {
       seg.tileSprite.setPosition(ls.scaleX(seg.baseX), ls.scaleY(seg.baseY));
       seg.tileSprite.width = ls.scaleValue(seg.baseWidth);
       seg.tileSprite.height = ls.scaleValue(seg.baseHeight);
+
+      // Uniform tile scale: fit texture height to belt width, preserve aspect ratio
+      const tileScale = ls.scaleValue(seg.baseHeight) / texFrame.height;
+      seg.tileSprite.setTileScale(tileScale, tileScale);
     }
   }
 
@@ -586,7 +605,7 @@ export class GameScene extends Phaser.Scene {
   private enterGameOver(a: ConveyorItem, b: ConveyorItem): void {
     this.gameOver = true;
     this.collidedItems = [a, b];
-    this.time.delayedCall(500, () => {
+    this.time.delayedCall(3000, () => {
       this.scene.start('GameOverScene', { score: this.gameManager.getScore() });
     });
   }
@@ -672,7 +691,7 @@ export class GameScene extends Phaser.Scene {
       );
       sprite.setOrigin(0.5, 0.5);
       sprite.setRotation(cfg.rotation);
-      sprite.setDepth(0);
+      sprite.setDepth(1);
 
       // Scale sprite to cover the machine body dimensions
       const frame = sprite.frame;
@@ -746,10 +765,10 @@ export class GameScene extends Phaser.Scene {
   private static readonly WORKER_SIZE = 80;
 
   /** Terminal body dimensions in base-resolution pixels (from TerminalDrawing). */
-  private static readonly TERMINAL_BODY_W = LAYOUT.STATION_H;  // 40
-  private static readonly TERMINAL_BODY_H = LAYOUT.STATION_W;  // 60
-  /** Terminal center position in base resolution. */
-  private static readonly TERMINAL_BASE_X = LAYOUT.BELT_X - GameScene.TERMINAL_BODY_W + GameScene.TERMINAL_BODY_W / 2;  // 180
+  private static readonly TERMINAL_BODY_W = LAYOUT.STATION_H * 2;  // 80
+  private static readonly TERMINAL_BODY_H = LAYOUT.STATION_W * 2;  // 120
+  /** Terminal center position in base resolution — centered between inner left belt edge and left floor node. */
+  private static readonly TERMINAL_BASE_X = (LAYOUT.BELT_X + LAYOUT.BELT_THICKNESS + (LAYOUT.CENTER_X - LAYOUT.NODE_OFFSET - LAYOUT.NODE_SIZE / 2)) / 2;
   private static readonly TERMINAL_BASE_Y = LAYOUT.CENTER_Y;  // 300
 
   /**
@@ -901,7 +920,7 @@ export class GameScene extends Phaser.Scene {
     const sprite = this.add.sprite(0, 0, ITEM_STATE_ASSET['new']);
     sprite.setOrigin(0.5, 0.5);
     sprite.setVisible(false);
-    sprite.setDepth(1);
+    sprite.setDepth(0);
     const entry: ItemSpriteEntry = { sprite, active: false };
     this.itemSpritePool.push(entry);
     return entry;
