@@ -5,10 +5,15 @@ import {
   UPGRADE_DIRECTION_MAP,
   MACHINE_DIRECTION_MAP,
   UPGRADE_CONFIG,
+  AUTOMATION_SPEED_TABLE,
+  CAPACITY_TABLE,
+  QUALITY_MODIFIER_TABLE,
+  AUTOMATION_LEVEL_TABLE,
 } from '../data/UpgradeConfig';
 import { GameManager } from '../systems/GameManager';
 import { LayoutSystem } from '../systems/LayoutSystem';
 import { LAYOUT } from '../systems/InputSystem';
+import { FeedbackManager } from '../systems/FeedbackManager';
 
 export type TerminalPhase = 'machine-select' | 'upgrade-select';
 
@@ -33,11 +38,23 @@ export class TerminalUI {
   private selectedMachineId: string | null = null;
   private active: boolean = false;
   private uiElements: Phaser.GameObjects.GameObject[] = [];
+  private feedbackManager: FeedbackManager | null = null;
+  private terminalSprite: Phaser.GameObjects.Sprite | null = null;
 
   constructor(scene: Phaser.Scene, layoutSystem: LayoutSystem, gameManager: GameManager) {
     this.scene = scene;
     this.layoutSystem = layoutSystem;
     this.gameManager = gameManager;
+  }
+
+  /** Set the FeedbackManager reference for upgrade purchase feedback (Task 9.3) */
+  setFeedbackManager(feedbackManager: FeedbackManager): void {
+    this.feedbackManager = feedbackManager;
+  }
+
+  /** Set the terminal sprite reference for UI_Pulse effects (Task 9.3) */
+  setTerminalSprite(sprite: Phaser.GameObjects.Sprite): void {
+    this.terminalSprite = sprite;
   }
 
   open(): void {
@@ -93,7 +110,28 @@ export class TerminalUI {
     } else if (this.phase === 'upgrade-select') {
       const upgradeType = UPGRADE_DIRECTION_MAP[direction];
       if (upgradeType && this.selectedMachineId) {
-        this.gameManager.attemptPurchase(this.selectedMachineId, upgradeType);
+        // Check if already at max level before attempting purchase (Task 9.3)
+        const isMaxBefore = this.gameManager.isMaxLevel(this.selectedMachineId, upgradeType);
+
+        if (isMaxBefore) {
+          // At max level — show "MAX" floating text in yellow (Req 6.8)
+          if (this.feedbackManager && this.terminalSprite) {
+            this.feedbackManager.showFloatingText(
+              this.terminalSprite.x,
+              this.terminalSprite.y,
+              'MAX',
+              '#ffcc00',
+            );
+          }
+        } else {
+          const success = this.gameManager.attemptPurchase(this.selectedMachineId, upgradeType);
+
+          if (success && this.feedbackManager) {
+            // Successful purchase — play level-up sound, show "Upgraded!" text, pulse terminal (Req 6.5, 6.6, 6.7, 8.5)
+            this.feedbackManager.playUpgradeFeedback(this.terminalSprite);
+          }
+        }
+
         this.destroyUI();
         this.renderUpgradeSelect();
       }
@@ -190,10 +228,10 @@ export class TerminalUI {
       color: '#ffcc00',
     };
 
-    // Background overlay
+    // Background overlay — slightly taller to fit level + preview text
     const bg = this.scene.add.rectangle(
       cx, cy,
-      ls.scaleValue(320), ls.scaleValue(280),
+      ls.scaleValue(320), ls.scaleValue(300),
       0x000000, 0.85,
     );
     this.uiElements.push(bg);
@@ -222,40 +260,53 @@ export class TerminalUI {
 
       const bx = cx + dx;
       const by = cy + dy;
+      const smallFontSize = ls.scaleFontSize(10);
 
-      // Button background rectangle
+      // Button background rectangle — taller to fit level + preview text
       const btnBg = this.scene.add.rectangle(
         bx, by,
-        ls.scaleValue(100), ls.scaleValue(44),
+        ls.scaleValue(120), ls.scaleValue(60),
         0x333333, 0.9,
       );
       this.uiElements.push(btnBg);
 
-      // Upgrade type label
-      const typeText = this.scene.add.text(bx, by - ls.scaleValue(8), label, {
+      // Upgrade type label + level display (Task 9.1, Req 6.1)
+      const levelStr = `${level} / ${UPGRADE_CONFIG.maxLevel}`;
+      const typeText = this.scene.add.text(bx, by - ls.scaleValue(18), `${label}  ${levelStr}`, {
         fontFamily: 'monospace',
-        fontSize: `${fontSize}px`,
+        fontSize: `${ls.scaleFontSize(11)}px`,
         color: '#ffffff',
       }).setOrigin(0.5, 0.5);
       this.uiElements.push(typeText);
 
-      // Cost or MAX label
+      // Cost or MAX label (Req 6.3, 6.4)
       let costStr: string;
       let costColor: string;
       if (isMax) {
         costStr = 'MAX';
         costColor = '#ffcc00';
       } else {
-        costStr = `$${cost}`;
+        costStr = `${cost}`;
         costColor = canAfford ? '#00ff00' : '#ff0000';
       }
 
-      const costText = this.scene.add.text(bx, by + ls.scaleValue(8), costStr, {
+      const costText = this.scene.add.text(bx, by - ls.scaleValue(4), costStr, {
         fontFamily: 'monospace',
         fontSize: `${fontSize}px`,
         color: costColor,
       }).setOrigin(0.5, 0.5);
       this.uiElements.push(costText);
+
+      // Next-upgrade preview or hide when at max (Task 9.2, Req 6.2, 6.3, 10.3, 10.4)
+      if (!isMax) {
+        const previewStr = this.getUpgradePreview(upgradeType, level);
+        const previewText = this.scene.add.text(bx, by + ls.scaleValue(12), previewStr, {
+          fontFamily: 'monospace',
+          fontSize: `${smallFontSize}px`,
+          color: '#aaaaaa',
+        }).setOrigin(0.5, 0.5);
+        this.uiElements.push(previewText);
+      }
     }
 
     // Hint
@@ -265,5 +316,37 @@ export class TerminalUI {
       color: '#888888',
     }).setOrigin(0.5, 0.5);
     this.uiElements.push(hint);
+  }
+
+  /**
+   * Get a human-readable preview string for the next upgrade level.
+   * Uses the upgrade tables to show current → next values.
+   * (Task 9.2, Req 6.2, 10.3, 10.4)
+   */
+  private getUpgradePreview(type: UpgradeType, currentLevel: number): string {
+    const nextLevel = currentLevel + 1;
+
+    switch (type) {
+      case 'speed': {
+        const current = AUTOMATION_SPEED_TABLE[currentLevel];
+        const next = AUTOMATION_SPEED_TABLE[nextLevel];
+        return `${current}ms → ${next}ms`;
+      }
+      case 'capacity': {
+        const current = CAPACITY_TABLE[currentLevel];
+        const next = CAPACITY_TABLE[nextLevel];
+        return `Cap: ${current} → ${next}`;
+      }
+      case 'quality': {
+        const current = QUALITY_MODIFIER_TABLE[currentLevel];
+        const next = QUALITY_MODIFIER_TABLE[nextLevel];
+        return `Qual: ${current.toFixed(2)}x → ${next.toFixed(2)}x`;
+      }
+      case 'automation': {
+        const current = AUTOMATION_LEVEL_TABLE[currentLevel];
+        const next = AUTOMATION_LEVEL_TABLE[nextLevel];
+        return `Auto: ${current} → ${next}`;
+      }
+    }
   }
 }
