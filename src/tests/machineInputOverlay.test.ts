@@ -4,19 +4,12 @@ import {
   OVERLAY_BASE_X,
   OVERLAY_BASE_Y,
   OVERLAY_WIDTH,
-  OVERLAY_HEIGHT,
   OVERLAY_PADDING,
   STEP_SPACING,
   ARROW_MAP,
   COLOR_PENDING,
   COLOR_COMPLETED,
   COLOR_FAILED,
-  COLOR_CANCELLED,
-  COLOR_LABEL,
-  LABEL_FONT_SIZE,
-  STEP_FONT_SIZE,
-  RESULT_FONT_SIZE,
-  RESULT_DELAY,
 } from '../ui/MachineInputOverlay';
 import { MachineInputOverlay } from '../ui/MachineInputOverlay';
 import { LayoutSystem } from '../systems/LayoutSystem';
