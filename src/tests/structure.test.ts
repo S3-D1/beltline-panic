@@ -7,7 +7,7 @@ import { resolve } from 'path';
 const root = process.cwd();
 
 describe('src/ subdirectories', () => {
-  const dirs = ['scenes', 'systems', 'objects', 'ui', 'data', 'utils'];
+  const dirs = ['scenes', 'systems', 'ui', 'data', 'utils', 'rendering', 'types', 'tests'];
 
   for (const dir of dirs) {
     it(`src/${dir} exists`, () => {

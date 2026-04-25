@@ -19,7 +19,7 @@ This is a **solo jam project**, so the setup must favor:
 - **TypeScript**  
   fallback: JavaScript if setup friction becomes too high
 - **Vite**
-- **npm**
+- **pnpm**
 - **HTML5 / Web build**
 
 ---

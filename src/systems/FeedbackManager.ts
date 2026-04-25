@@ -149,8 +149,7 @@ export class FeedbackManager {
     this.scoreText = scoreText;
 
     // Log new feedback element types at initialization (Req 1.6)
-    console.log('[FeedbackManager] Registered existing: budgetText, scoreText');
-    console.log('[FeedbackManager] New feedback elements: floatingText, statusLight, interactionHint, visualEffects');
+    // (Development traceability logs removed for production)
   }
 
   // ── Per-frame update (Task 8.1, 8.3) ────────────────────────────────
@@ -595,7 +594,7 @@ export class FeedbackManager {
           break;
         case 'ready':
           if (isPlayerAdjacent) {
-            message = 'E: Process';
+            message = 'Space: Process';
             color = HINT_COLORS.ready!;
           }
           break;
