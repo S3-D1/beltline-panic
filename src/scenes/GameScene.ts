@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { InputSystem, LAYOUT } from '../systems/InputSystem';
+import { InputSystem, LAYOUT, PlayerPosition } from '../systems/InputSystem';
 import { ConveyorSystem, ConveyorItem } from '../systems/ConveyorSystem';
 import { ItemSystem } from '../systems/ItemSystem';
 import { MachineSystem } from '../systems/MachineSystem';
@@ -13,19 +13,46 @@ import { TerminalUI } from '../ui/TerminalUI';
 import { AudioManager } from '../systems/AudioManager';
 import { MuteButtonUI } from '../ui/MuteButtonUI';
 import { drawFloor } from '../rendering/FloorDrawing';
-import { drawBelt } from '../rendering/BeltDrawing';
-import { drawTerminal } from '../rendering/TerminalDrawing';
-import { drawMachines } from '../rendering/MachineDrawing';
-import { drawItems } from '../rendering/ItemDrawing';
-import { PALETTE } from '../rendering/Palette';
+import { PATH_SEGMENTS, BELT_WIDTH } from '../rendering/BeltDrawing';
+import { ASSET_KEYS, ITEM_STATE_ASSET } from '../data/AssetKeys';
+
+import { MACHINE_DEFINITIONS } from '../data/MachineConfig';
+import { ITEM_SIZE } from '../data/ConveyorConfig';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
+
+interface BeltSegmentSprite {
+  tileSprite: Phaser.GameObjects.TileSprite;
+  baseX: number;      // center X in base resolution
+  baseY: number;      // center Y in base resolution
+  baseWidth: number;   // segment length in base resolution
+  baseHeight: number;  // belt width in base resolution
+  rotation: number;    // radians
+  isVertical: boolean;
+}
+
+interface ItemSpriteEntry {
+  sprite: Phaser.GameObjects.Sprite;
+  active: boolean;
+}
+
+interface MachineSpriteState {
+  sprite: Phaser.GameObjects.Sprite;
+  machineId: string;
+  baseX: number;
+  baseY: number;
+  baseWidth: number;
+  baseHeight: number;
+  rotation: number; // radians — orientation to face the belt
+}
+
+const INITIAL_ITEM_POOL_SIZE = 10;
 
 export class GameScene extends Phaser.Scene {
   private inputSystem!: InputSystem;
-  private playerGraphic!: Phaser.GameObjects.Graphics;
+  private workerSprite!: Phaser.GameObjects.Sprite;
   private conveyorSystem!: ConveyorSystem;
   private itemSystem!: ItemSystem;
-  private itemGraphics!: Phaser.GameObjects.Graphics;
+  private itemSpritePool: ItemSpriteEntry[] = [];
   private gameManager!: GameManager;
   private scoreText!: Phaser.GameObjects.Text;
   private budgetText!: Phaser.GameObjects.Text;
@@ -37,7 +64,7 @@ export class GameScene extends Phaser.Scene {
   private automationSystem!: AutomationSystem;
   private terminalUI!: TerminalUI;
   private terminalMode: boolean = false;
-  private machineGraphics!: Phaser.GameObjects.Graphics;
+  private machineSprites: MachineSpriteState[] = [];
   private machineSystem!: MachineSystem;
   private sequenceInputUI!: SequenceInputUI;
   private actionLayer!: ActionLayer;
@@ -45,8 +72,8 @@ export class GameScene extends Phaser.Scene {
   private layoutSystem: LayoutSystem = new LayoutSystem();
   private layoutGraphics!: Phaser.GameObjects.Graphics;
   private floorGraphics!: Phaser.GameObjects.Graphics;
-  private beltGraphics!: Phaser.GameObjects.Graphics;
-  private terminalGraphics!: Phaser.GameObjects.Graphics;
+  private beltSegmentSprites: BeltSegmentSprite[] = [];
+  private terminalSprite!: Phaser.GameObjects.Sprite;
   private prevInteractionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled' = 'idle';
   private audioManager!: AudioManager;
   private muteButton!: MuteButtonUI;
@@ -96,24 +123,35 @@ export class GameScene extends Phaser.Scene {
       if (this.muteButton) {
         this.muteButton.resize(this.layoutSystem);
       }
+
+      // Reposition and rescale belt TileSprites
+      this.resizeBeltTileSprites();
+
+      // Reposition and rescale terminal sprite
+      this.resizeTerminalSprite();
+
+      // Reposition and rescale machine sprites
+      this.resizeMachineSprites();
     });
 
-    // Create floor graphics at lowest depth, belt graphics slightly above
+    // Create floor graphics at lowest depth
     this.floorGraphics = this.add.graphics();
     this.floorGraphics.setDepth(-2);
-    this.beltGraphics = this.add.graphics();
-    this.beltGraphics.setDepth(-1);
-    this.terminalGraphics = this.add.graphics();
-    this.terminalGraphics.setDepth(0);
+
+    // Create belt TileSprites for each path segment
+    this.createBeltTileSprites();
+
+    // Create terminal sprite (left side of belt, vertically centered)
+    this.createTerminalSprite();
 
     this.drawLayout();
     this.actionLayer = new ActionLayer(this);
     this.inputSystem = new InputSystem();
     this.conveyorSystem = new ConveyorSystem();
     this.itemSystem = new ItemSystem(this.conveyorSystem);
-    this.itemGraphics = this.add.graphics();
-    this.playerGraphic = this.add.graphics();
-    this.machineGraphics = this.add.graphics();
+    this.createItemSpritePool();
+    this.createWorkerSprite();
+    this.createMachineSprites();
 
     // Machine system and UI
     this.machineSystem = new MachineSystem(this.conveyorSystem);
@@ -227,8 +265,10 @@ export class GameScene extends Phaser.Scene {
       this.gameManager.update(delta);
 
       // Advance belt animation offset proportional to belt speed
-      const segmentSpacing = 20; // base-resolution pixels per segment
-      this.beltOffset += (this.gameManager.getBeltSpeed() / 1000) * (delta / 1000) * (1 / segmentSpacing);
+      const beltSpeed = this.gameManager.getBeltSpeed();
+      const pixelsPerMs = beltSpeed / 1000;
+      const distanceThisFrame = pixelsPerMs * delta;
+      this.beltOffset += distanceThisFrame;
 
       const result = this.itemSystem.update(delta, this.gameManager);
 
@@ -316,22 +356,15 @@ export class GameScene extends Phaser.Scene {
 
     // Per-frame rendering (back-to-front): Belt → Terminal → Machines → Items → Player
     // Floor is static and only redrawn on resize in drawLayout()
-    drawBelt({ graphics: this.beltGraphics, layoutSystem: this.layoutSystem, beltOffset: this.beltOffset, gameOver: this.gameOver });
-    this.terminalGraphics.clear();
-    drawTerminal({ graphics: this.terminalGraphics, layoutSystem: this.layoutSystem, playerPosition: this.inputSystem.getPlayerPosition() });
-    this.renderMachines();
-    this.renderItems();
-    // Player rendering
-    const { x, y } = this.inputSystem.getPlayerCoords();
-    const playerSize = this.layoutSystem.scaleValue(40);
-    this.playerGraphic.clear();
-    this.playerGraphic.fillStyle(PALETTE.PLAYER, 1);
-    this.playerGraphic.fillRect(
-      this.layoutSystem.scaleX(x) - playerSize / 2,
-      this.layoutSystem.scaleY(y) - playerSize / 2,
-      playerSize,
-      playerSize,
-    );
+    // Belt TileSprites are static (no scrolling animation). beltOffset is still
+    // tracked above for item movement calculations, but the visual tiles don't scroll.
+
+    // Terminal sprite — swap texture based on player position
+    this.updateTerminalSprite();
+    this.updateMachineSprites();
+    this.syncItemSprites();
+    // Worker sprite rendering — update texture, flip, position, and scale
+    this.updateWorkerSprite();
 
     // Sync mute button label with actual mute state
     this.muteButton.update();
@@ -364,24 +397,100 @@ export class GameScene extends Phaser.Scene {
     this.prevInteractionState = interactionState;
   }
 
+  /**
+   * Creates belt TileSprite instances for each path segment (inlet, loop edges, outlet).
+   * Each TileSprite is sized to the segment's drawable length × belt width,
+   * rotated to match the segment direction, and positioned at the segment center.
+   *
+   * No setCrop() is needed: the belt PNG (1536×1024, RGB, no alpha channel) is
+   * fully opaque — there is no transparent padding to clip. The TileSprite
+   * dimensions (baseWidth × BELT_WIDTH) already constrain the visible region
+   * to exactly the belt strip.
+   */
+  private createBeltTileSprites(): void {
+    // Destroy any existing belt TileSprites (e.g., on scene restart)
+    for (const seg of this.beltSegmentSprites) {
+      seg.tileSprite.destroy();
+    }
+    this.beltSegmentSprites = [];
+
+    const ls = this.layoutSystem;
+
+    for (const seg of PATH_SEGMENTS) {
+      const drawLen = seg.length - seg.drawStart - seg.drawEnd;
+      if (drawLen <= 0) continue;
+
+      // Compute center of the drawable portion in base resolution
+      const startT = seg.drawStart / seg.length;
+      const endT = 1 - seg.drawEnd / seg.length;
+      const midT = (startT + endT) / 2;
+      const baseX = seg.from.x + (seg.to.x - seg.from.x) * midT;
+      const baseY = seg.from.y + (seg.to.y - seg.from.y) * midT;
+
+      // TileSprite dimensions in base resolution:
+      // width = segment drawable length (along the belt direction)
+      // height = belt width (perpendicular to belt direction)
+      const baseWidth = drawLen;
+      const baseHeight = BELT_WIDTH;
+
+      // Determine rotation: vertical segments rotate 90° (π/2)
+      const isVertical = seg.isVertical;
+      const rotation = isVertical ? Math.PI / 2 : 0;
+
+      // Create TileSprite at screen-scaled dimensions
+      const screenWidth = ls.scaleValue(baseWidth);
+      const screenHeight = ls.scaleValue(baseHeight);
+      const tileSprite = this.add.tileSprite(
+        ls.scaleX(baseX),
+        ls.scaleY(baseY),
+        screenWidth,
+        screenHeight,
+        ASSET_KEYS.BELT,
+      );
+      tileSprite.setOrigin(0.5, 0.5);
+      tileSprite.setRotation(rotation);
+      tileSprite.setDepth(-1);
+
+      this.beltSegmentSprites.push({
+        tileSprite,
+        baseX,
+        baseY,
+        baseWidth,
+        baseHeight,
+        rotation,
+        isVertical,
+      });
+    }
+  }
+
+  /**
+   * Repositions and rescales all belt TileSprites on resize.
+   */
+  private resizeBeltTileSprites(): void {
+    const ls = this.layoutSystem;
+
+    for (const seg of this.beltSegmentSprites) {
+      seg.tileSprite.setPosition(ls.scaleX(seg.baseX), ls.scaleY(seg.baseY));
+      seg.tileSprite.width = ls.scaleValue(seg.baseWidth);
+      seg.tileSprite.height = ls.scaleValue(seg.baseHeight);
+    }
+  }
+
   private drawLayout(): void {
     // Clear previous layout graphics so we can redraw on resize
     if (this.layoutGraphics) {
       this.layoutGraphics.clear();
     } else {
       this.layoutGraphics = this.add.graphics();
+      // Keep layout graphics below sprites so it never obscures
+      // transparent regions of terminal or machine sprites (depth 0).
+      this.layoutGraphics.setDepth(-1);
     }
 
     const ls = this.layoutSystem;
 
     // Floor — walkable/non-walkable distinction (replaces old movementAreaGraphics)
     drawFloor({ graphics: this.floorGraphics, layoutSystem: ls });
-
-    // Belt — static redraw on create/resize (animated per-frame in update via task 8.6)
-    drawBelt({ graphics: this.beltGraphics, layoutSystem: ls, beltOffset: this.beltOffset, gameOver: this.gameOver });
-
-    // Left — UpgradeTerminal (drawn via TerminalDrawing module)
-    drawTerminal({ graphics: this.terminalGraphics, layoutSystem: ls, playerPosition: this.inputSystem?.getPlayerPosition() ?? 'center' });
   }
 
   private enterGameOver(a: ConveyorItem, b: ConveyorItem): void {
@@ -397,25 +506,364 @@ export class GameScene extends Phaser.Scene {
     this.budgetText.setText('$' + this.gameManager.getBudget());
   }
 
-  private renderMachines(): void {
-    this.machineGraphics.clear();
-    drawMachines({
-      graphics: this.machineGraphics,
-      layoutSystem: this.layoutSystem,
-      machines: this.machineSystem.getMachines(),
-      machineSystem: this.machineSystem,
-    });
+  /**
+   * Creates 3 machine sprite instances, one per machine definition.
+   * Positions, rotates, and scales each sprite to match the existing MachineDrawing body layout.
+   */
+  private createMachineSprites(): void {
+    // Destroy any existing machine sprites (e.g., on scene restart)
+    for (const ms of this.machineSprites) {
+      ms.sprite.destroy();
+    }
+    this.machineSprites = [];
+
+    const ls = this.layoutSystem;
+
+    // Machine body positions and dimensions matching MachineDrawing.ts
+    const machineConfigs: { id: string; pos: string; baseX: number; baseY: number; baseWidth: number; baseHeight: number; rotation: number }[] = [];
+
+    for (const def of MACHINE_DEFINITIONS) {
+      let bx: number, by: number, bw: number, bh: number, rotation: number;
+
+      switch (def.playerPosition) {
+        case 'up': {
+          // Machine 1 — top: centered on CENTER_X, overlaps top belt edge
+          bw = 140;
+          bh = 90;
+          bx = LAYOUT.CENTER_X - bw / 2;
+          by = LAYOUT.BELT_Y - bh + 30; // overlap belt by ~30px
+          rotation = Math.PI; // faces down toward belt
+          break;
+        }
+        case 'right': {
+          // Machine 2 — right: centered on CENTER_Y, overlaps right belt edge
+          bw = 90;
+          bh = 140;
+          bx = LAYOUT.BELT_X + LAYOUT.BELT_W - 30; // overlap belt by ~30px
+          by = LAYOUT.CENTER_Y - bh / 2;
+          rotation = Math.PI / 2; // faces left toward belt
+          break;
+        }
+        case 'down': {
+          // Machine 3 — bottom: centered on CENTER_X, overlaps bottom belt edge
+          bw = 140;
+          bh = 90;
+          bx = LAYOUT.CENTER_X - bw / 2;
+          by = LAYOUT.BELT_Y + LAYOUT.BELT_H - 30; // overlap belt by ~30px
+          rotation = 0; // faces up toward belt
+          break;
+        }
+        default:
+          continue;
+      }
+
+      machineConfigs.push({
+        id: def.id,
+        pos: def.playerPosition,
+        baseX: bx + bw / 2,  // center X
+        baseY: by + bh / 2,  // center Y
+        baseWidth: bw,
+        baseHeight: bh,
+        rotation,
+      });
+    }
+
+    for (const cfg of machineConfigs) {
+      const sprite = this.add.sprite(
+        ls.scaleX(cfg.baseX),
+        ls.scaleY(cfg.baseY),
+        ASSET_KEYS.MACHINE_NO_INTERACTION_INACTIVE,
+      );
+      sprite.setOrigin(0.5, 0.5);
+      sprite.setRotation(cfg.rotation);
+      sprite.setDepth(0);
+
+      // Scale sprite to cover the machine body dimensions
+      const frame = sprite.frame;
+      const scaleX = ls.scaleValue(cfg.baseWidth) / frame.width;
+      const scaleY = ls.scaleValue(cfg.baseHeight) / frame.height;
+      sprite.setScale(scaleX, scaleY);
+
+      this.machineSprites.push({
+        sprite,
+        machineId: cfg.id,
+        baseX: cfg.baseX,
+        baseY: cfg.baseY,
+        baseWidth: cfg.baseWidth,
+        baseHeight: cfg.baseHeight,
+        rotation: cfg.rotation,
+      });
+    }
   }
 
-  private renderItems(): void {
-    this.itemGraphics.clear();
-    drawItems({
-      graphics: this.itemGraphics,
-      layoutSystem: this.layoutSystem,
-      items: this.itemSystem.getItems(),
-      gameOver: this.gameOver,
-      collidedItems: this.collidedItems,
-      blinkTimer: this.blinkTimer,
-    });
+  /**
+   * Each frame, swaps machine sprite texture based on state:
+   * - machine_interaction_active when player is interacting
+   * - machine_no-interaction_active when machine is active
+   * - machine_no-interaction_inactive when idle
+   */
+  private updateMachineSprites(): void {
+    const machines = this.machineSystem.getMachines();
+
+    for (const ms of this.machineSprites) {
+      const machine = machines.find(m => m.definition.id === ms.machineId);
+      if (!machine) continue;
+
+      // Determine the correct texture based on machine state
+      let textureKey: string;
+      if (this.machineSystem.isPlayerInteracting(ms.machineId)) {
+        textureKey = ASSET_KEYS.MACHINE_INTERACTION_ACTIVE;
+      } else if (this.machineSystem.isActive(ms.machineId)) {
+        textureKey = ASSET_KEYS.MACHINE_NO_INTERACTION_ACTIVE;
+      } else {
+        textureKey = ASSET_KEYS.MACHINE_NO_INTERACTION_INACTIVE;
+      }
+
+      ms.sprite.setTexture(textureKey);
+
+      // Recompute scale after texture swap (textures may have different frame sizes)
+      const ls = this.layoutSystem;
+      const frame = ms.sprite.frame;
+      const scaleX = ls.scaleValue(ms.baseWidth) / frame.width;
+      const scaleY = ls.scaleValue(ms.baseHeight) / frame.height;
+      ms.sprite.setScale(scaleX, scaleY);
+    }
+  }
+
+  /**
+   * Repositions and rescales machine sprites on resize.
+   */
+  private resizeMachineSprites(): void {
+    const ls = this.layoutSystem;
+
+    for (const ms of this.machineSprites) {
+      ms.sprite.setPosition(ls.scaleX(ms.baseX), ls.scaleY(ms.baseY));
+
+      const frame = ms.sprite.frame;
+      const scaleX = ls.scaleValue(ms.baseWidth) / frame.width;
+      const scaleY = ls.scaleValue(ms.baseHeight) / frame.height;
+      ms.sprite.setScale(scaleX, scaleY);
+    }
+  }
+
+  /** Worker sprite size in base-resolution pixels (doubled from original 40). */
+  private static readonly WORKER_SIZE = 80;
+
+  /** Terminal body dimensions in base-resolution pixels (from TerminalDrawing). */
+  private static readonly TERMINAL_BODY_W = LAYOUT.STATION_H;  // 40
+  private static readonly TERMINAL_BODY_H = LAYOUT.STATION_W;  // 60
+  /** Terminal center position in base resolution. */
+  private static readonly TERMINAL_BASE_X = LAYOUT.BELT_X - GameScene.TERMINAL_BODY_W + GameScene.TERMINAL_BODY_W / 2;  // 180
+  private static readonly TERMINAL_BASE_Y = LAYOUT.CENTER_Y;  // 300
+
+  /**
+   * Creates the terminal sprite in create() using terminal_inactive as default texture.
+   * Positioned at the left side of the belt, vertically centered (matching TerminalDrawing).
+   */
+  private createTerminalSprite(): void {
+    if (this.terminalSprite) {
+      this.terminalSprite.destroy();
+    }
+
+    const ls = this.layoutSystem;
+
+    this.terminalSprite = this.add.sprite(
+      ls.scaleX(GameScene.TERMINAL_BASE_X),
+      ls.scaleY(GameScene.TERMINAL_BASE_Y),
+      ASSET_KEYS.TERMINAL_INACTIVE,
+    );
+    this.terminalSprite.setOrigin(0.5, 0.5);
+    this.terminalSprite.setDepth(0);
+
+    // Scale sprite to cover 40×60 base-resolution pixels
+    const frame = this.terminalSprite.frame;
+    const scaleX = ls.scaleValue(GameScene.TERMINAL_BODY_W) / frame.width;
+    const scaleY = ls.scaleValue(GameScene.TERMINAL_BODY_H) / frame.height;
+    this.terminalSprite.setScale(scaleX, scaleY);
+  }
+
+  /**
+   * Each frame, swaps terminal sprite texture based on terminal interaction state:
+   * terminal_active when terminalMode is true (player is interacting), terminal_inactive otherwise.
+   */
+  private updateTerminalSprite(): void {
+    const textureKey = this.terminalMode
+      ? ASSET_KEYS.TERMINAL_ACTIVE
+      : ASSET_KEYS.TERMINAL_INACTIVE;
+
+    this.terminalSprite.setTexture(textureKey);
+
+    // Recompute scale after texture swap (textures may have different frame sizes)
+    const ls = this.layoutSystem;
+    const frame = this.terminalSprite.frame;
+    const scaleX = ls.scaleValue(GameScene.TERMINAL_BODY_W) / frame.width;
+    const scaleY = ls.scaleValue(GameScene.TERMINAL_BODY_H) / frame.height;
+    this.terminalSprite.setScale(scaleX, scaleY);
+  }
+
+  /**
+   * Repositions and rescales terminal sprite on resize.
+   */
+  private resizeTerminalSprite(): void {
+    const ls = this.layoutSystem;
+
+    this.terminalSprite.setPosition(
+      ls.scaleX(GameScene.TERMINAL_BASE_X),
+      ls.scaleY(GameScene.TERMINAL_BASE_Y),
+    );
+
+    const frame = this.terminalSprite.frame;
+    const scaleX = ls.scaleValue(GameScene.TERMINAL_BODY_W) / frame.width;
+    const scaleY = ls.scaleValue(GameScene.TERMINAL_BODY_H) / frame.height;
+    this.terminalSprite.setScale(scaleX, scaleY);
+  }
+
+  /**
+   * Creates the worker sprite in create() using worker_64_front as default texture.
+   * Depth 2 places the worker above items and machines.
+   */
+  private createWorkerSprite(): void {
+    if (this.workerSprite) {
+      this.workerSprite.destroy();
+    }
+
+    const ls = this.layoutSystem;
+    const { x, y } = this.inputSystem.getPlayerCoords();
+
+    this.workerSprite = this.add.sprite(
+      ls.scaleX(x),
+      ls.scaleY(y),
+      ASSET_KEYS.WORKER_FRONT,
+    );
+    this.workerSprite.setOrigin(0.5, 0.5);
+    this.workerSprite.setDepth(2);
+
+    // Scale to WORKER_SIZE base-resolution pixels
+    const targetScreenSize = ls.scaleValue(GameScene.WORKER_SIZE);
+    const frame = this.workerSprite.frame;
+    const spriteScale = targetScreenSize / Math.max(frame.width, frame.height);
+    this.workerSprite.setScale(spriteScale);
+  }
+
+  /**
+   * Returns the correct (assetKey, flipX) pair for a given player position.
+   */
+  private getWorkerTextureForPosition(position: PlayerPosition): { key: string; flipX: boolean } {
+    switch (position) {
+      case 'center': return { key: ASSET_KEYS.WORKER_FRONT, flipX: false };
+      case 'up':     return { key: ASSET_KEYS.WORKER_BACK, flipX: false };
+      case 'down':   return { key: ASSET_KEYS.WORKER_FRONT, flipX: false };
+      case 'left':   return { key: ASSET_KEYS.WORKER_SIDE, flipX: true };
+      case 'right':  return { key: ASSET_KEYS.WORKER_SIDE, flipX: false };
+    }
+  }
+
+  /**
+   * Each frame, updates the worker sprite texture, flipX, position, and scale
+   * based on the current player position.
+   */
+  private updateWorkerSprite(): void {
+    const ls = this.layoutSystem;
+    const position = this.inputSystem.getPlayerPosition();
+    const { x, y } = this.inputSystem.getPlayerCoords();
+
+    // Update texture and flip based on player position
+    const { key, flipX } = this.getWorkerTextureForPosition(position);
+    this.workerSprite.setTexture(key);
+    this.workerSprite.setFlipX(flipX);
+
+    // Position at scaled player coordinates
+    this.workerSprite.setPosition(ls.scaleX(x), ls.scaleY(y));
+
+    // Scale to WORKER_SIZE base-resolution pixels (recompute after texture swap)
+    const targetScreenSize = ls.scaleValue(GameScene.WORKER_SIZE);
+    const frame = this.workerSprite.frame;
+    const spriteScale = targetScreenSize / Math.max(frame.width, frame.height);
+    this.workerSprite.setScale(spriteScale);
+  }
+
+  /**
+   * Creates the initial item sprite pool with INITIAL_ITEM_POOL_SIZE entries.
+   * Each sprite starts hidden and uses the 'new' item texture as default.
+   */
+  private createItemSpritePool(): void {
+    // Destroy any existing pool sprites (e.g., on scene restart)
+    for (const entry of this.itemSpritePool) {
+      entry.sprite.destroy();
+    }
+    this.itemSpritePool = [];
+
+    for (let i = 0; i < INITIAL_ITEM_POOL_SIZE; i++) {
+      this.addItemSpriteToPool();
+    }
+  }
+
+  /**
+   * Adds a single sprite entry to the item pool.
+   */
+  private addItemSpriteToPool(): ItemSpriteEntry {
+    const sprite = this.add.sprite(0, 0, ITEM_STATE_ASSET['new']);
+    sprite.setOrigin(0.5, 0.5);
+    sprite.setVisible(false);
+    sprite.setDepth(1);
+    const entry: ItemSpriteEntry = { sprite, active: false };
+    this.itemSpritePool.push(entry);
+    return entry;
+  }
+
+  /**
+   * Syncs the item sprite pool with the current items each frame.
+   * Sets position, texture, scale, visibility, and collision blink tint.
+   */
+  private syncItemSprites(): void {
+    const items = this.itemSystem.getItems();
+    const ls = this.layoutSystem;
+
+    // Grow pool if needed (Task 3.4)
+    while (items.length > this.itemSpritePool.length) {
+      this.addItemSpriteToPool();
+    }
+
+    // Compute the target display scale: ITEM_SIZE base pixels → screen pixels
+    // The sprite source is 64×64, so we need to scale it down to ITEM_SIZE in base resolution
+    const targetScreenSize = ls.scaleValue(ITEM_SIZE);
+
+    for (let i = 0; i < this.itemSpritePool.length; i++) {
+      const entry = this.itemSpritePool[i];
+
+      if (i < items.length) {
+        const item = items[i];
+        const textureKey = ITEM_STATE_ASSET[item.state];
+
+        entry.sprite.setPosition(ls.scaleX(item.x), ls.scaleY(item.y));
+        entry.sprite.setTexture(textureKey);
+
+        // Scale sprite so it displays at ITEM_SIZE base-resolution pixels
+        const frame = entry.sprite.frame;
+        const spriteScale = targetScreenSize / Math.max(frame.width, frame.height);
+        entry.sprite.setScale(spriteScale);
+
+        entry.sprite.setVisible(true);
+        entry.active = true;
+
+        // Collision blink effect (Task 3.3)
+        const isCollided = this.gameOver && this.collidedItems !== null &&
+          (item === this.collidedItems[0] || item === this.collidedItems[1]);
+
+        if (isCollided) {
+          if (Math.floor(this.blinkTimer / 300) % 2 === 0) {
+            entry.sprite.setTint(0xff0000);
+          } else {
+            entry.sprite.clearTint();
+          }
+        } else {
+          entry.sprite.clearTint();
+        }
+      } else {
+        // Hide unused pool sprites
+        entry.sprite.setVisible(false);
+        entry.active = false;
+      }
+    }
   }
 }
