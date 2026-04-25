@@ -617,41 +617,47 @@ export class GameScene extends Phaser.Scene {
 
       switch (def.playerPosition) {
         case 'up': {
-          // Machine 1 — top: centered on CENTER_X, overlaps top belt edge
+          // Machine 1 — top: covers top belt strip
+          // Asset has transparent padding at bottom (~12px), so shift down to compensate
           bw = 140;
           bh = 90;
           bx = LAYOUT.CENTER_X - bw / 2;
-          by = LAYOUT.BELT_Y - bh + 30; // overlap belt by ~30px
-          rotation = Math.PI; // faces down toward belt
+          by = LAYOUT.BELT_Y + LAYOUT.BELT_THICKNESS - bh + 12;
+          rotation = 0;
           break;
         }
         case 'right': {
-          // Machine 2 — right: centered on CENTER_Y, overlaps right belt edge
-          bw = 90;
-          bh = 140;
-          bx = LAYOUT.BELT_X + LAYOUT.BELT_W - 30; // overlap belt by ~30px
-          by = LAYOUT.CENTER_Y - bh / 2;
-          rotation = Math.PI / 2; // faces left toward belt
+          // Machine 2 — right: covers right belt strip
+          // Asset has transparent padding; after 90° rotation the padding is on the left visible side
+          bw = 140;
+          bh = 90;
+          bx = LAYOUT.BELT_X + LAYOUT.BELT_W - LAYOUT.BELT_THICKNESS - 12;
+          by = LAYOUT.CENTER_Y - bw / 2;
+          rotation = Math.PI / 2;
           break;
         }
         case 'down': {
-          // Machine 3 — bottom: centered on CENTER_X, overlaps bottom belt edge
+          // Machine 3 — bottom: covers bottom belt strip
+          // Asset has transparent padding at bottom (which is top after 180° rotation), shift up
           bw = 140;
           bh = 90;
           bx = LAYOUT.CENTER_X - bw / 2;
-          by = LAYOUT.BELT_Y + LAYOUT.BELT_H - 30; // overlap belt by ~30px
-          rotation = 0; // faces up toward belt
+          by = LAYOUT.BELT_Y + LAYOUT.BELT_H - LAYOUT.BELT_THICKNESS - 12;
+          rotation = Math.PI;
           break;
         }
         default:
           continue;
       }
 
+      // For rotated machines (90°), the visible footprint swaps bw/bh.
+      // Compute center accordingly.
+      const rotated = Math.abs(rotation - Math.PI / 2) < 0.01;
       machineConfigs.push({
         id: def.id,
         pos: def.playerPosition,
-        baseX: bx + bw / 2,  // center X
-        baseY: by + bh / 2,  // center Y
+        baseX: rotated ? bx + bh / 2 : bx + bw / 2,  // center X
+        baseY: rotated ? by + bw / 2 : by + bh / 2,  // center Y
         baseWidth: bw,
         baseHeight: bh,
         rotation,
