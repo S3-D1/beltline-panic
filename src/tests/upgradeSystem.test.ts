@@ -10,7 +10,7 @@ import {
   UPGRADE_DIRECTION_MAP,
   MACHINE_DIRECTION_MAP,
 } from '../data/UpgradeConfig';
-import { GameManager, MachineValueConfig, MACHINE_VALUE_CONFIGS } from '../systems/GameManager';
+import { GameManager, MACHINE_VALUE_CONFIGS } from '../systems/GameManager';
 import { MachineState, MACHINE_DEFAULTS } from '../data/MachineConfig';
 
 /** Helper: create a minimal MachineState for testing applyUpgrades */
