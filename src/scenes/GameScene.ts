@@ -318,15 +318,16 @@ export class GameScene extends Phaser.Scene {
       this.gameManager.update(delta);
 
       // Advance belt animation offset proportional to belt speed
-      const beltSpeed = this.gameManager.getBeltSpeed();
+      const beltSpeed = DELIVERY_CONFIG.initialBeltSpeed * this.gameManager.getBeltSpeedFactor();
       const pixelsPerMs = beltSpeed / 1000;
       const distanceThisFrame = pixelsPerMs * delta;
       this.beltOffset += distanceThisFrame;
 
-      const result = this.itemSystem.update(delta, this.gameManager);
+      const result = this.itemSystem.update(delta, this.gameManager, beltSpeed);
 
       for (const val of result.exitedValues) {
-        this.gameManager.addPayout(val);
+        const multipliedVal = Math.round(val * this.gameManager.getIncomeMultiplier());
+        this.gameManager.addPayout(multipliedVal);
         this.audioManager.playScore();
       }
       this.updateScoreDisplay();
@@ -423,7 +424,7 @@ export class GameScene extends Phaser.Scene {
 
       // Update gameplay music speed based on current belt speed
       this.audioManager.updateGameplayMusicSpeed(
-        this.gameManager.getBeltSpeed(),
+        beltSpeed,
         DELIVERY_CONFIG.initialBeltSpeed,
         DELIVERY_CONFIG.maxBeltSpeed,
       );

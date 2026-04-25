@@ -131,13 +131,12 @@ describe('Automation — step-by-step sequence solving', () => {
     const machine = ms.getMachines()[0]; // machine1
     machine.automationLevel = automationLevel;
 
-    // Apply speed upgrades by directly setting via GameManager internals
-    // We use addPayout + attemptPurchase to set speed level properly
+    // Apply speed upgrades using new per-type costs
     if (speedLevel > 0) {
-      // Need enough budget for speed purchases
+      const multipliers = [1.0, 1.45, 2.1, 3.0, 4.3, 6.1, 8.6, 12.0, 16.5, 22.5];
       let totalCost = 0;
       for (let i = 0; i < speedLevel; i++) {
-        totalCost += 50 * Math.pow(2, i); // machine1 base = 50
+        totalCost += Math.round(12 * multipliers[i]); // automationSpeed base = 12
       }
       gm.addPayout(totalCost);
       for (let i = 0; i < speedLevel; i++) {
@@ -277,8 +276,8 @@ describe('Automation — speed upgrade reduces timing', () => {
     const machine = ms.getMachines()[0];
     machine.automationLevel = 1;
 
-    // Purchase 1 speed upgrade
-    gm.addPayout(50);
+    // Purchase 1 speed upgrade (automationSpeed base cost = 12)
+    gm.addPayout(12);
     gm.attemptPurchase('machine1', 'speed');
 
     placeItemInMachine(machine, 'new');
@@ -301,8 +300,9 @@ describe('Automation — speed upgrade reduces timing', () => {
     const machine = ms.getMachines()[0];
     machine.automationLevel = 1;
 
-    // Purchase 5 speed upgrades (costs: 50, 100, 200, 400, 800 = 1550)
-    gm.addPayout(1550);
+    // Purchase 5 speed upgrades (automationSpeed base=12, multipliers: 1.0, 1.45, 2.1, 3.0, 4.3)
+    // costs: 12, 17, 25, 36, 52 = 142
+    gm.addPayout(142);
     for (let i = 0; i < 5; i++) {
       gm.attemptPurchase('machine1', 'speed');
     }
@@ -498,7 +498,7 @@ describe('Upgrade effects on machine behavior', () => {
 
     expect(machine.capacity).toBe(MACHINE_DEFAULTS.capacity); // 1
 
-    gm.addPayout(50);
+    gm.addPayout(15); // capacity base cost = 15
     gm.attemptPurchase('machine1', 'capacity');
     gm.applyUpgrades('machine1', machine);
 
@@ -510,15 +510,15 @@ describe('Upgrade effects on machine behavior', () => {
     const gm = new GameManager();
     const machine = ms.getMachines()[0];
 
-    gm.addPayout(50);
+    gm.addPayout(20); // quality base cost = 20
     gm.attemptPurchase('machine1', 'quality');
     gm.applyUpgrades('machine1', machine);
 
     // machine1 uses qualityScalingMode: 'baseValue' with baseValue: 10
-    // At quality level 1: workQuality = 10 * QUALITY_MODIFIER_TABLE[1] = 10 * 1.15 = 11.5
-    expect(machine.workQuality).toBeCloseTo(11.5);
-    // At quality level 1: requiredSequenceLength = SEQUENCE_LENGTH_TABLE[1] = 4
-    expect(machine.requiredSequenceLength).toBe(4);
+    // At quality level 1: workQuality = 10 * QUALITY_MODIFIER_TABLE[1] = 10 * 1.20 = 12.0
+    expect(machine.workQuality).toBeCloseTo(12.0);
+    // At quality level 1: requiredSequenceLength = SEQUENCE_LENGTH_TABLE[1] = 3
+    expect(machine.requiredSequenceLength).toBe(3);
   });
 
   it('automation upgrade sets automationLevel', () => {
@@ -528,7 +528,7 @@ describe('Upgrade effects on machine behavior', () => {
 
     expect(machine.automationLevel).toBe(0);
 
-    gm.addPayout(50);
+    gm.addPayout(10); // automation base cost = 10
     gm.attemptPurchase('machine1', 'automation');
     gm.applyUpgrades('machine1', machine);
 
@@ -541,8 +541,11 @@ describe('Upgrade effects on machine behavior', () => {
     const gm = new GameManager();
     const machine = ms.getMachines()[0];
 
-    // Buy 1 quality + 3 automation
-    gm.addPayout(50 + 50 + 100 + 200); // quality=50, auto=50+100+200
+    // Buy 2 quality upgrades to get sequenceLength=4, + 3 automation
+    // quality costs: round(20*1.0)=20, round(20*1.45)=29 → total 49
+    // automation costs: round(10*1.0)=10, round(10*1.45)=15, round(10*2.1)=21 → total 46
+    gm.addPayout(95);
+    gm.attemptPurchase('machine1', 'quality');
     gm.attemptPurchase('machine1', 'quality');
     gm.attemptPurchase('machine1', 'automation');
     gm.attemptPurchase('machine1', 'automation');
@@ -550,7 +553,7 @@ describe('Upgrade effects on machine behavior', () => {
     gm.applyUpgrades('machine1', machine);
 
     expect(machine.automationLevel).toBe(3);
-    expect(machine.requiredSequenceLength).toBe(4); // 3 + 1
+    expect(machine.requiredSequenceLength).toBe(4); // SEQUENCE_LENGTH_TABLE[2] = 4
 
     placeItemInMachine(machine, 'new');
 
