@@ -35,12 +35,12 @@ describe('GameScene — integration checks', () => {
     expect(source).toContain('new MachineSystem');
   });
 
-  // Example 8 (machine-gameplay): GameScene.ts imports and instantiates SequenceInputUI
-  it('GameScene.ts source imports and instantiates SequenceInputUI', () => {
+  // Example 8 (machine-input-overlay): GameScene.ts imports and instantiates MachineInputOverlay
+  it('GameScene.ts source imports and instantiates MachineInputOverlay', () => {
     const sourcePath = path.resolve(__dirname, '../scenes/GameScene.ts');
     const source = fs.readFileSync(sourcePath, 'utf-8');
-    expect(source).toContain('SequenceInputUI');
-    expect(source).toContain('new SequenceInputUI');
+    expect(source).toContain('MachineInputOverlay');
+    expect(source).toContain('new MachineInputOverlay');
   });
 
   // Example 6 (touch-input-layer): GameScene.ts does not use JustDown or addKey directly

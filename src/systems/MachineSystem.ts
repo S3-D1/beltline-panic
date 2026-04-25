@@ -16,6 +16,7 @@ export interface MachineUpdateResult {
   itemsToRemove: ConveyorItem[];
   itemsToReturn: ConveyorItem[];
   interactionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled';
+  chainedInteraction: ActiveInteraction | null;
 }
 
 export function generateRandomSequence(length: number): Direction[] {
@@ -229,6 +230,7 @@ export class MachineSystem {
       itemsToRemove: [],
       itemsToReturn: [],
       interactionState: this.activeInteraction ? 'active' : 'idle',
+      chainedInteraction: null,
     };
 
     // Step 1: Intake check
@@ -311,6 +313,22 @@ export class MachineSystem {
           result.interactionState = 'success';
           machine.activeInteraction = null;
           this.activeInteraction = null;
+
+          // Auto-chain: if machine has more queued items, start next interaction
+          if (machine.heldItems.length > 0) {
+            const nextItem = machine.heldItems.shift()!;
+            const nextSequence = this.getSequenceForMachine(machine);
+            const nextInteraction: ActiveInteraction = {
+              machineId: machine.definition.id,
+              item: nextItem,
+              originalState: nextItem.state,
+              sequence: nextSequence,
+              currentStep: 0,
+            };
+            this.activeInteraction = nextInteraction;
+            machine.activeInteraction = nextInteraction;
+            result.chainedInteraction = nextInteraction;
+          }
         }
       } else {
         // Wrong input: abort, check safe release before returning item in original state

@@ -3,7 +3,7 @@ import { InputSystem, LAYOUT, PlayerPosition } from '../systems/InputSystem';
 import { ConveyorSystem, ConveyorItem } from '../systems/ConveyorSystem';
 import { ItemSystem } from '../systems/ItemSystem';
 import { MachineSystem } from '../systems/MachineSystem';
-import { SequenceInputUI } from '../ui/SequenceInputUI';
+import { MachineInputOverlay } from '../ui/MachineInputOverlay';
 import { ActionLayer } from '../systems/ActionLayer';
 import { TouchButtonUI } from '../ui/TouchButtonUI';
 import { LayoutSystem } from '../systems/LayoutSystem';
@@ -17,7 +17,7 @@ import { drawFloor } from '../rendering/FloorDrawing';
 import { PATH_SEGMENTS, BELT_WIDTH } from '../rendering/BeltDrawing';
 import { ASSET_KEYS, ITEM_STATE_ASSET } from '../data/AssetKeys';
 
-import { MACHINE_DEFINITIONS } from '../data/MachineConfig';
+import { MACHINE_DEFINITIONS, ActiveInteraction } from '../data/MachineConfig';
 import { ITEM_SIZE } from '../data/ConveyorConfig';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 import { UPGRADE_DIRECTION_MAP } from '../data/UpgradeConfig';
@@ -68,7 +68,7 @@ export class GameScene extends Phaser.Scene {
   private terminalMode: boolean = false;
   private machineSprites: MachineSpriteState[] = [];
   private machineSystem!: MachineSystem;
-  private sequenceInputUI!: SequenceInputUI;
+  private machineInputOverlay!: MachineInputOverlay;
   private actionLayer!: ActionLayer;
   private touchButtonUI!: TouchButtonUI;
   private layoutSystem: LayoutSystem = new LayoutSystem();
@@ -136,6 +136,11 @@ export class GameScene extends Phaser.Scene {
       // Reposition and rescale machine sprites
       this.resizeMachineSprites();
 
+      // Reposition MachineInputOverlay on resize
+      if (this.machineInputOverlay) {
+        this.machineInputOverlay.resize(this.layoutSystem);
+      }
+
       // Reposition FeedbackManager UI elements (Task 12.6)
       if (this.feedbackManager) {
         this.feedbackManager.handleResize();
@@ -163,7 +168,7 @@ export class GameScene extends Phaser.Scene {
 
     // Machine system and UI
     this.machineSystem = new MachineSystem(this.conveyorSystem);
-    this.sequenceInputUI = new SequenceInputUI(this, this.layoutSystem);
+    this.machineInputOverlay = new MachineInputOverlay(this, this.layoutSystem);
     this.touchButtonUI = new TouchButtonUI(this, this.actionLayer, this.layoutSystem);
 
     // GameManager
@@ -391,8 +396,8 @@ export class GameScene extends Phaser.Scene {
           }
         }
 
-        // Update SequenceInputUI based on interaction state changes
-        this.updateSequenceUI(machineResult.interactionState);
+        // Update MachineInputOverlay based on interaction state changes
+        this.updateSequenceUI(machineResult.interactionState, machineResult.chainedInteraction);
       }
 
       // Automation system update
@@ -460,28 +465,35 @@ export class GameScene extends Phaser.Scene {
     this.muteButton.update();
   }
 
-  private updateSequenceUI(interactionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled'): void {
+  private updateSequenceUI(
+    interactionState: 'idle' | 'active' | 'success' | 'failed' | 'cancelled',
+    chainedInteraction: ActiveInteraction | null,
+  ): void {
     const interaction = this.machineSystem.getActiveInteraction();
 
     // Interaction just started — show UI
     if (interactionState === 'active' && this.prevInteractionState !== 'active') {
       if (interaction) {
-        this.sequenceInputUI.show(interaction.sequence, interaction.machineId);
+        this.machineInputOverlay.show(interaction.sequence, interaction.machineId);
       }
     }
 
     // Interaction is active — highlight current step progress
     if (interactionState === 'active' && interaction && interaction.currentStep > 0) {
-      this.sequenceInputUI.highlightStep(interaction.currentStep - 1);
+      this.machineInputOverlay.highlightStep(interaction.currentStep - 1);
     }
 
     // Interaction ended with a result
     if (interactionState === 'success') {
-      this.sequenceInputUI.showResult('success');
+      if (chainedInteraction) {
+        this.machineInputOverlay.transitionToNext(chainedInteraction.sequence, chainedInteraction.machineId);
+      } else {
+        this.machineInputOverlay.showResult('success');
+      }
     } else if (interactionState === 'failed') {
-      this.sequenceInputUI.showResult('failed');
+      this.machineInputOverlay.showResult('failed');
     } else if (interactionState === 'cancelled') {
-      this.sequenceInputUI.showResult('cancelled');
+      this.machineInputOverlay.showResult('cancelled');
     }
 
     this.prevInteractionState = interactionState;
