@@ -48,11 +48,11 @@ export class GameOverScene extends Phaser.Scene {
     this.audioManager = this.game.audioManager as AudioManager;
     this.audioManager.playGameOverStinger();
 
-    // Create mute button UI — handles both click and M key
+    // No mute button in GameOver — no music playing, and M key is needed for name input
     if (this.muteButton) {
       this.muteButton.destroy();
+      this.muteButton = null!;
     }
-    this.muteButton = new MuteButtonUI(this, this.layoutSystem);
 
     // Remove previous resize listener to avoid stacking on restart
     this.scale.off('resize');
@@ -60,7 +60,7 @@ export class GameOverScene extends Phaser.Scene {
       this.layoutSystem.update(gameSize.width, gameSize.height);
       this.repositionNameInput();
       this.repositionScoreboard();
-      this.muteButton.resize(this.layoutSystem);
+      if (this.muteButton) this.muteButton.resize(this.layoutSystem);
     });
 
     // Initialize phase state
@@ -133,9 +133,6 @@ export class GameOverScene extends Phaser.Scene {
   /** Handle individual key presses during name input. */
   private handleKeyInput(event: KeyboardEvent): void {
     if (this.phase !== 'nameInput') return;
-
-    // M key is reserved for mute toggle — do not treat as name input
-    if (event.key === 'm' || event.key === 'M') return;
 
     if (event.key === 'Enter') {
       if (this.currentName.length > 0) {
@@ -309,6 +306,9 @@ export class GameOverScene extends Phaser.Scene {
     this.scoreboardTexts.push(restartPrompt);
 
     this.setupRestartListeners();
+
+    // Re-create mute button now that name input is done and scoreboard music plays
+    this.muteButton = new MuteButtonUI(this, this.layoutSystem);
   }
 
   /** Reposition all scoreboard text objects on resize. */
