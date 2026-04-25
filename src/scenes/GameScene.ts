@@ -523,9 +523,18 @@ export class GameScene extends Phaser.Scene {
       const baseWidth = drawLen;
       const baseHeight = BELT_WIDTH;
 
-      // Determine rotation: vertical segments rotate 90° (π/2)
+      // Determine rotation based on segment direction:
+      // - Right-moving horizontal: 0
+      // - Left-moving horizontal: π (180°)
+      // - Down-moving vertical: π/2 (90°)
+      // - Up-moving vertical: 3π/2 (270°)
       const isVertical = seg.isVertical;
-      const rotation = isVertical ? Math.PI / 2 : 0;
+      let rotation: number;
+      if (isVertical) {
+        rotation = seg.dy > 0 ? Math.PI / 2 : (3 * Math.PI) / 2;
+      } else {
+        rotation = seg.dx > 0 ? 0 : Math.PI;
+      }
 
       // Create TileSprite at screen-scaled dimensions
       const screenWidth = ls.scaleValue(baseWidth);
@@ -540,6 +549,11 @@ export class GameScene extends Phaser.Scene {
       tileSprite.setOrigin(0.5, 0.5);
       tileSprite.setRotation(rotation);
       tileSprite.setDepth(-1);
+
+      // Uniform tile scale: fit texture height to belt width, preserve aspect ratio
+      const texFrame = this.textures.getFrame(ASSET_KEYS.BELT);
+      const tileScale = ls.scaleValue(baseHeight) / texFrame.height;
+      tileSprite.setTileScale(tileScale, tileScale);
 
       this.beltSegmentSprites.push({
         tileSprite,
@@ -558,11 +572,16 @@ export class GameScene extends Phaser.Scene {
    */
   private resizeBeltTileSprites(): void {
     const ls = this.layoutSystem;
+    const texFrame = this.textures.getFrame(ASSET_KEYS.BELT);
 
     for (const seg of this.beltSegmentSprites) {
       seg.tileSprite.setPosition(ls.scaleX(seg.baseX), ls.scaleY(seg.baseY));
       seg.tileSprite.width = ls.scaleValue(seg.baseWidth);
       seg.tileSprite.height = ls.scaleValue(seg.baseHeight);
+
+      // Uniform tile scale: fit texture height to belt width, preserve aspect ratio
+      const tileScale = ls.scaleValue(seg.baseHeight) / texFrame.height;
+      seg.tileSprite.setTileScale(tileScale, tileScale);
     }
   }
 
@@ -586,7 +605,7 @@ export class GameScene extends Phaser.Scene {
   private enterGameOver(a: ConveyorItem, b: ConveyorItem): void {
     this.gameOver = true;
     this.collidedItems = [a, b];
-    this.time.delayedCall(500, () => {
+    this.time.delayedCall(3000, () => {
       this.scene.start('GameOverScene', { score: this.gameManager.getScore() });
     });
   }
@@ -617,41 +636,47 @@ export class GameScene extends Phaser.Scene {
 
       switch (def.playerPosition) {
         case 'up': {
-          // Machine 1 — top: centered on CENTER_X, overlaps top belt edge
+          // Machine 1 — top: covers top belt strip
+          // Asset has transparent padding at bottom (~12px), so shift down to compensate
           bw = 140;
           bh = 90;
           bx = LAYOUT.CENTER_X - bw / 2;
-          by = LAYOUT.BELT_Y - bh + 30; // overlap belt by ~30px
-          rotation = Math.PI; // faces down toward belt
+          by = LAYOUT.BELT_Y + LAYOUT.BELT_THICKNESS - bh + 12;
+          rotation = 0;
           break;
         }
         case 'right': {
-          // Machine 2 — right: centered on CENTER_Y, overlaps right belt edge
-          bw = 90;
-          bh = 140;
-          bx = LAYOUT.BELT_X + LAYOUT.BELT_W - 30; // overlap belt by ~30px
-          by = LAYOUT.CENTER_Y - bh / 2;
-          rotation = Math.PI / 2; // faces left toward belt
+          // Machine 2 — right: covers right belt strip
+          // Asset has transparent padding; after 90° rotation the padding is on the left visible side
+          bw = 140;
+          bh = 90;
+          bx = LAYOUT.BELT_X + LAYOUT.BELT_W - LAYOUT.BELT_THICKNESS - 12;
+          by = LAYOUT.CENTER_Y - bw / 2;
+          rotation = Math.PI / 2;
           break;
         }
         case 'down': {
-          // Machine 3 — bottom: centered on CENTER_X, overlaps bottom belt edge
+          // Machine 3 — bottom: covers bottom belt strip
+          // Asset has transparent padding at bottom (which is top after 180° rotation), shift up
           bw = 140;
           bh = 90;
           bx = LAYOUT.CENTER_X - bw / 2;
-          by = LAYOUT.BELT_Y + LAYOUT.BELT_H - 30; // overlap belt by ~30px
-          rotation = 0; // faces up toward belt
+          by = LAYOUT.BELT_Y + LAYOUT.BELT_H - LAYOUT.BELT_THICKNESS - 12;
+          rotation = Math.PI;
           break;
         }
         default:
           continue;
       }
 
+      // For rotated machines (90°), the visible footprint swaps bw/bh.
+      // Compute center accordingly.
+      const rotated = Math.abs(rotation - Math.PI / 2) < 0.01;
       machineConfigs.push({
         id: def.id,
         pos: def.playerPosition,
-        baseX: bx + bw / 2,  // center X
-        baseY: by + bh / 2,  // center Y
+        baseX: rotated ? bx + bh / 2 : bx + bw / 2,  // center X
+        baseY: rotated ? by + bw / 2 : by + bh / 2,  // center Y
         baseWidth: bw,
         baseHeight: bh,
         rotation,
@@ -666,7 +691,7 @@ export class GameScene extends Phaser.Scene {
       );
       sprite.setOrigin(0.5, 0.5);
       sprite.setRotation(cfg.rotation);
-      sprite.setDepth(0);
+      sprite.setDepth(1);
 
       // Scale sprite to cover the machine body dimensions
       const frame = sprite.frame;
@@ -740,10 +765,10 @@ export class GameScene extends Phaser.Scene {
   private static readonly WORKER_SIZE = 80;
 
   /** Terminal body dimensions in base-resolution pixels (from TerminalDrawing). */
-  private static readonly TERMINAL_BODY_W = LAYOUT.STATION_H;  // 40
-  private static readonly TERMINAL_BODY_H = LAYOUT.STATION_W;  // 60
-  /** Terminal center position in base resolution. */
-  private static readonly TERMINAL_BASE_X = LAYOUT.BELT_X - GameScene.TERMINAL_BODY_W + GameScene.TERMINAL_BODY_W / 2;  // 180
+  private static readonly TERMINAL_BODY_W = LAYOUT.STATION_H * 2;  // 80
+  private static readonly TERMINAL_BODY_H = LAYOUT.STATION_W * 2;  // 120
+  /** Terminal center position in base resolution — centered between inner left belt edge and left floor node. */
+  private static readonly TERMINAL_BASE_X = (LAYOUT.BELT_X + LAYOUT.BELT_THICKNESS + (LAYOUT.CENTER_X - LAYOUT.NODE_OFFSET - LAYOUT.NODE_SIZE / 2)) / 2;
   private static readonly TERMINAL_BASE_Y = LAYOUT.CENTER_Y;  // 300
 
   /**
@@ -895,7 +920,7 @@ export class GameScene extends Phaser.Scene {
     const sprite = this.add.sprite(0, 0, ITEM_STATE_ASSET['new']);
     sprite.setOrigin(0.5, 0.5);
     sprite.setVisible(false);
-    sprite.setDepth(1);
+    sprite.setDepth(0);
     const entry: ItemSpriteEntry = { sprite, active: false };
     this.itemSpritePool.push(entry);
     return entry;

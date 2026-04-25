@@ -54,9 +54,9 @@ export const INLET_END: Point   = { x: LAYOUT.BELT_X,   y: INLET_Y };
 // --- Transition zones (progress ranges on the loop, 0–1) ---
 
 export const TRANSITION_ZONES: TransitionZone[] = [
-  { progressStart: 0.15, progressEnd: 0.23, fromState: 'new',       toState: 'processed' }, // Machine_1 (top edge)
-  { progressStart: 0.39, progressEnd: 0.47, fromState: 'processed', toState: 'upgraded'  }, // Machine_2 (right edge)
-  { progressStart: 0.63, progressEnd: 0.71, fromState: 'upgraded',  toState: 'packaged'  }, // Machine_3 (bottom edge)
+  { progressStart: 0.156, progressEnd: 0.236, fromState: 'new',       toState: 'processed' }, // Machine_1 (top edge)
+  { progressStart: 0.406, progressEnd: 0.486, fromState: 'processed', toState: 'upgraded'  }, // Machine_2 (right edge)
+  { progressStart: 0.656, progressEnd: 0.736, fromState: 'upgraded',  toState: 'packaged'  }, // Machine_3 (bottom edge)
 ];
 
 // --- Outlet geometry ---
