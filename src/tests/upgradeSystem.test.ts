@@ -56,12 +56,12 @@ describe('Upgrade System — example-based unit tests', () => {
 
     it('SEQUENCE_LENGTH_TABLE has exactly 11 entries with correct values', () => {
       expect(SEQUENCE_LENGTH_TABLE).toHaveLength(11);
-      expect([...SEQUENCE_LENGTH_TABLE]).toEqual([3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10]);
+      expect([...SEQUENCE_LENGTH_TABLE]).toEqual([3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10]);
     });
 
     it('QUALITY_MODIFIER_TABLE has exactly 11 entries with correct values', () => {
       expect(QUALITY_MODIFIER_TABLE).toHaveLength(11);
-      expect([...QUALITY_MODIFIER_TABLE]).toEqual([1.00, 1.15, 1.30, 1.50, 1.75, 2.00, 2.35, 2.75, 3.25, 4.00, 5.00]);
+      expect([...QUALITY_MODIFIER_TABLE]).toEqual([1.00, 1.20, 1.45, 1.75, 2.10, 2.50, 3.00, 3.60, 4.30, 5.10, 6.00]);
     });
 
     it('CAPACITY_TABLE has exactly 11 entries with correct values', () => {
@@ -200,8 +200,9 @@ describe('Upgrade System — example-based unit tests', () => {
     it('returns null when machine is at max level (10)', () => {
       const gm = new GameManager();
       // Fund enough to buy all 10 levels of capacity on machine1
-      // Cost = 50 * (2^0 + 2^1 + ... + 2^9) = 50 * 1023 = 51150
-      gm.addPayout(51150);
+      // Per-type costs: 15 * [1.0, 1.45, 2.1, 3.0, 4.3, 6.1, 8.6, 12.0, 16.5, 22.5]
+      // = 15 + 22 + 32 + 45 + 65 + 92 + 129 + 180 + 248 + 338 = 1166
+      gm.addPayout(1166);
       for (let i = 0; i < 10; i++) {
         gm.attemptPurchase('machine1', 'capacity');
       }
@@ -221,7 +222,7 @@ describe('Upgrade System — example-based unit tests', () => {
 
     it('returns true at level 10', () => {
       const gm = new GameManager();
-      gm.addPayout(51150);
+      gm.addPayout(1166);
       for (let i = 0; i < 10; i++) {
         gm.attemptPurchase('machine1', 'capacity');
       }
@@ -262,8 +263,10 @@ describe('Upgrade System — example-based unit tests', () => {
     it('sets capacity=11, sequenceLength=10, automationLevel=10', () => {
       const gm = new GameManager();
       // Fund enough to max out capacity, quality, and automation on machine1
-      // Each type: 50 * 1023 = 51150, need 3 types = 153450
-      gm.addPayout(153450);
+      // capacity: 15 * sum(multipliers) ≈ 1166
+      // quality: 20 * sum(multipliers) ≈ 1555
+      // automation: 10 * sum(multipliers) ≈ 778
+      gm.addPayout(3499);
       for (let i = 0; i < 10; i++) {
         gm.attemptPurchase('machine1', 'capacity');
       }

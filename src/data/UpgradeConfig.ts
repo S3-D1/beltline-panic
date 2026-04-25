@@ -12,12 +12,12 @@ export const AUTOMATION_LEVEL_TABLE: readonly number[] = [
 
 /** Required sequence length per quality level (Level 0–10) */
 export const SEQUENCE_LENGTH_TABLE: readonly number[] = [
-  3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10,
+  3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10,
 ] as const;
 
 /** Quality multiplier per quality level (Level 0–10) */
 export const QUALITY_MODIFIER_TABLE: readonly number[] = [
-  1.00, 1.15, 1.30, 1.50, 1.75, 2.00, 2.35, 2.75, 3.25, 4.00, 5.00,
+  1.00, 1.20, 1.45, 1.75, 2.10, 2.50, 3.00, 3.60, 4.30, 5.10, 6.00,
 ] as const;
 
 /** Machine capacity per capacity level (Level 0–10) */

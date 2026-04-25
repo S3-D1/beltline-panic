@@ -68,31 +68,31 @@ describe('GameManager — unit tests', () => {
     expect(UPGRADE_DIRECTION_MAP['left']).toBe('speed');
   });
 
-  // Example 7: Cost at level 0 = base price
+  // Example 7: Cost at level 0 = per-type base cost
   // Validates: Requirements 9.2
-  it('cost at level 0 = base price (machine1 capacity costs 50)', () => {
+  it('cost at level 0 = per-type base cost (machine1 capacity costs 15)', () => {
     const gm = new GameManager();
-    expect(gm.getUpgradeCost('machine1', 'capacity')).toBe(50);
+    expect(gm.getUpgradeCost('machine1', 'capacity')).toBe(15);
   });
 
-  // Example 8: Cost at level 1 = base price × 2
+  // Example 8: Cost at level 1 uses costMultiplierPerLevel
   // Validates: Requirements 9.3
-  it('cost at level 1 = base price × 2 (machine1 capacity costs 100 after one purchase)', () => {
+  it('cost at level 1 uses costMultiplierPerLevel (machine1 capacity costs 22 after one purchase)', () => {
     const gm = new GameManager();
-    gm.addPayout(50);
+    gm.addPayout(15);
     const purchased = gm.attemptPurchase('machine1', 'capacity');
     expect(purchased).toBe(true);
-    expect(gm.getUpgradeCost('machine1', 'capacity')).toBe(100);
+    expect(gm.getUpgradeCost('machine1', 'capacity')).toBe(22);
   });
 
-  // Example 9: Cost at level 2 = base price × 4
+  // Example 9: Cost at level 2 uses costMultiplierPerLevel
   // Validates: Requirements 9.4
-  it('cost at level 2 = base price × 4 (machine1 capacity costs 200 after two purchases)', () => {
+  it('cost at level 2 uses costMultiplierPerLevel (machine1 capacity costs 32 after two purchases)', () => {
     const gm = new GameManager();
-    gm.addPayout(150); // 50 + 100 = 150 needed for two purchases
-    gm.attemptPurchase('machine1', 'capacity'); // costs 50, budget = 100
-    gm.attemptPurchase('machine1', 'capacity'); // costs 100, budget = 0
-    expect(gm.getUpgradeCost('machine1', 'capacity')).toBe(200);
+    gm.addPayout(37); // 15 + 22 = 37 needed for two purchases
+    gm.attemptPurchase('machine1', 'capacity'); // costs 15, budget = 22
+    gm.attemptPurchase('machine1', 'capacity'); // costs 22, budget = 0
+    expect(gm.getUpgradeCost('machine1', 'capacity')).toBe(32);
   });
 
   // Example 10: Automation timing at level 0 = 1100ms

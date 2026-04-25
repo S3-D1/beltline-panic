@@ -187,11 +187,10 @@ describe('Property 6: Spawn interval monotonicity', () => {
   /**
    * **Validates: Requirements 3.2**
    *
-   * For any two elapsed times t1 < t2, given the default DELIVERY_CONFIG
-   * progression curve (which has non-increasing multipliers),
-   * getSpawnInterval() at t2 SHALL be ≤ getSpawnInterval() at t1.
+   * For any two elapsed times t1 < t2, given the default GameBalanceConfig,
+   * getSpawnIntervalMs() at t2 SHALL be ≤ getSpawnIntervalMs() at t1.
    */
-  it('spawn interval does not increase over time with non-increasing multiplier curve', () => {
+  it('spawn interval does not increase over time with adaptive difficulty', () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 600_000, noNaN: true, noDefaultInfinity: true }),
@@ -201,11 +200,11 @@ describe('Property 6: Spawn interval monotonicity', () => {
 
           const gm1 = new GameManager();
           gm1.update(t1);
-          const interval1 = gm1.getSpawnInterval();
+          const interval1 = gm1.getSpawnIntervalMs();
 
           const gm2 = new GameManager();
           gm2.update(t2);
-          const interval2 = gm2.getSpawnInterval();
+          const interval2 = gm2.getSpawnIntervalMs();
 
           expect(interval2).toBeLessThanOrEqual(interval1 + 1e-9);
         },
@@ -219,11 +218,10 @@ describe('Property 7: Belt speed monotonicity', () => {
   /**
    * **Validates: Requirements 3.3**
    *
-   * For any two elapsed times t1 < t2, given the default DELIVERY_CONFIG
-   * progression curve (which has non-decreasing multipliers),
-   * getBeltSpeed() at t2 SHALL be ≥ getBeltSpeed() at t1.
+   * For any two elapsed times t1 < t2, given the default GameBalanceConfig,
+   * getBeltSpeedFactor() at t2 SHALL be ≥ getBeltSpeedFactor() at t1.
    */
-  it('belt speed does not decrease over time with non-decreasing multiplier curve', () => {
+  it('belt speed does not decrease over time with adaptive difficulty', () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 600_000, noNaN: true, noDefaultInfinity: true }),
@@ -233,11 +231,11 @@ describe('Property 7: Belt speed monotonicity', () => {
 
           const gm1 = new GameManager();
           gm1.update(t1);
-          const speed1 = gm1.getBeltSpeed();
+          const speed1 = gm1.getBeltSpeedFactor();
 
           const gm2 = new GameManager();
           gm2.update(t2);
-          const speed2 = gm2.getBeltSpeed();
+          const speed2 = gm2.getBeltSpeedFactor();
 
           expect(speed2).toBeGreaterThanOrEqual(speed1 - 1e-9);
         },
@@ -252,9 +250,9 @@ describe('Property 8: Spawn interval floor', () => {
    * **Validates: Requirements 3.5**
    *
    * For any elapsed time (including very large values),
-   * getSpawnInterval() SHALL be ≥ the configured minSpawnInterval.
+   * getSpawnIntervalMs() SHALL be ≥ the configured minIntervalMs (280).
    */
-  it('spawn interval never drops below minSpawnInterval', () => {
+  it('spawn interval never drops below minIntervalMs', () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 10_000_000, noNaN: true, noDefaultInfinity: true }),
@@ -262,9 +260,7 @@ describe('Property 8: Spawn interval floor', () => {
           const gm = new GameManager();
           gm.update(elapsed);
 
-          expect(gm.getSpawnInterval()).toBeGreaterThanOrEqual(
-            DELIVERY_CONFIG.minSpawnInterval,
-          );
+          expect(gm.getSpawnIntervalMs()).toBeGreaterThanOrEqual(280);
         },
       ),
       { numRuns: 100 },
@@ -272,14 +268,13 @@ describe('Property 8: Spawn interval floor', () => {
   });
 });
 
-describe('Property 9: Belt speed ceiling', () => {
+describe('Property 9: Belt speed floor', () => {
   /**
-   * **Validates: Requirements 3.6**
+   * **Validates: Requirements 2.3**
    *
-   * For any elapsed time (including very large values),
-   * getBeltSpeed() SHALL be ≤ the configured maxBeltSpeed.
+   * For any elapsed time, getBeltSpeedFactor() SHALL be ≥ 1.0.
    */
-  it('belt speed never exceeds maxBeltSpeed', () => {
+  it('belt speed factor never drops below 1.0', () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 10_000_000, noNaN: true, noDefaultInfinity: true }),
@@ -287,9 +282,7 @@ describe('Property 9: Belt speed ceiling', () => {
           const gm = new GameManager();
           gm.update(elapsed);
 
-          expect(gm.getBeltSpeed()).toBeLessThanOrEqual(
-            DELIVERY_CONFIG.maxBeltSpeed,
-          );
+          expect(gm.getBeltSpeedFactor()).toBeGreaterThanOrEqual(1.0);
         },
       ),
       { numRuns: 100 },

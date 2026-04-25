@@ -124,25 +124,26 @@ import { GameManager } from '../systems/GameManager';
 import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 
 /**
- * Unit tests for GameManager delivery API.
+ * Unit tests for GameManager delivery API (adaptive difficulty).
  * Requirements: 2.1, 2.2, 2.3, 2.6, 4.3, 7.3
  */
 describe('GameManager delivery API', () => {
-  // --- Initial values match DELIVERY_CONFIG (Req 2.6, 4.3) ---
+  // --- Initial values match new adaptive difficulty system ---
 
-  it('initializes spawnInterval from DELIVERY_CONFIG', () => {
+  it('initializes spawnIntervalMs from GameBalanceConfig', () => {
     const gm = new GameManager();
-    expect(gm.getSpawnInterval()).toBe(DELIVERY_CONFIG.initialSpawnInterval);
+    // At t=0, timeDifficulty=0, so spawnIntervalMs = startIntervalMs = 1450
+    expect(gm.getSpawnIntervalMs()).toBe(1450);
   });
 
-  it('initializes beltSpeed from DELIVERY_CONFIG', () => {
+  it('initializes beltSpeedFactor to 1.0', () => {
     const gm = new GameManager();
-    expect(gm.getBeltSpeed()).toBe(DELIVERY_CONFIG.initialBeltSpeed);
+    expect(gm.getBeltSpeedFactor()).toBe(1.0);
   });
 
-  it('initializes jitter from DELIVERY_CONFIG', () => {
+  it('initializes incomeMultiplier to 1.4', () => {
     const gm = new GameManager();
-    expect(gm.getSpawnJitter()).toBe(DELIVERY_CONFIG.initialJitter);
+    expect(gm.getIncomeMultiplier()).toBeCloseTo(1.4, 5);
   });
 
   it('initializes elapsedTime to 0', () => {
@@ -150,23 +151,22 @@ describe('GameManager delivery API', () => {
     expect(gm.getElapsedTime()).toBe(0);
   });
 
-  // --- Getters return expected values after construction (Req 2.1, 2.2, 2.3, 7.3) ---
+  // --- Getters return expected values after construction ---
 
-  it('getSpawnInterval returns a number', () => {
+  it('getSpawnIntervalMs returns a number', () => {
     const gm = new GameManager();
-    expect(typeof gm.getSpawnInterval()).toBe('number');
+    expect(typeof gm.getSpawnIntervalMs()).toBe('number');
   });
 
-  it('getSpawnJitter returns a number in [0, 1]', () => {
+  it('getNextSpawnDelayMs returns a number >= 280', () => {
     const gm = new GameManager();
-    const jitter = gm.getSpawnJitter();
-    expect(jitter).toBeGreaterThanOrEqual(0);
-    expect(jitter).toBeLessThanOrEqual(1);
+    const delay = gm.getNextSpawnDelayMs();
+    expect(delay).toBeGreaterThanOrEqual(280);
   });
 
-  it('getBeltSpeed returns a positive number', () => {
+  it('getBeltSpeedFactor returns a number >= 1.0', () => {
     const gm = new GameManager();
-    expect(gm.getBeltSpeed()).toBeGreaterThan(0);
+    expect(gm.getBeltSpeedFactor()).toBeGreaterThanOrEqual(1.0);
   });
 
   it('getElapsedTime returns a number', () => {
@@ -174,7 +174,7 @@ describe('GameManager delivery API', () => {
     expect(typeof gm.getElapsedTime()).toBe('number');
   });
 
-  // --- update(delta) advances elapsed time correctly (Req 2.6, 3.1) ---
+  // --- update(delta) advances elapsed time correctly ---
 
   it('update(delta) advances elapsedTime by delta', () => {
     const gm = new GameManager();
@@ -196,24 +196,20 @@ describe('GameManager delivery API', () => {
     expect(gm.getElapsedTime()).toBe(0);
   });
 
-  it('update recalculates spawnInterval based on progression curve', () => {
+  it('update recalculates spawnIntervalMs based on difficulty curve', () => {
     const gm = new GameManager();
-    // Advance to 60000 ms (1 min) — spawn multiplier should be 0.7
-    gm.update(60000);
-    expect(gm.getSpawnInterval()).toBeCloseTo(
-      DELIVERY_CONFIG.initialSpawnInterval * 0.7,
-      5,
-    );
+    const initialInterval = gm.getSpawnIntervalMs();
+    // Advance to 30 seconds — spawn interval should decrease
+    gm.update(30000);
+    expect(gm.getSpawnIntervalMs()).toBeLessThan(initialInterval);
   });
 
-  it('update recalculates beltSpeed based on progression curve', () => {
+  it('update recalculates beltSpeedFactor based on difficulty curve', () => {
     const gm = new GameManager();
-    // Advance to 60000 ms (1 min) — belt multiplier should be 1.3
-    gm.update(60000);
-    expect(gm.getBeltSpeed()).toBeCloseTo(
-      DELIVERY_CONFIG.initialBeltSpeed * 1.3,
-      5,
-    );
+    const initialSpeed = gm.getBeltSpeedFactor();
+    // Advance to 30 seconds — belt speed should increase
+    gm.update(30000);
+    expect(gm.getBeltSpeedFactor()).toBeGreaterThan(initialSpeed);
   });
 });
 
@@ -388,48 +384,48 @@ describe('Wired system integration', () => {
     expect(gm.getElapsedTime()).toBeGreaterThan(0);
   });
 
-  // --- Spawn interval decreases over simulated time (Req 3.2) ---
+  // --- Spawn interval decreases over simulated time ---
 
-  it('gameManager.getSpawnInterval() decreases over simulated time', () => {
+  it('gameManager.getSpawnIntervalMs() decreases over simulated time', () => {
     const gm = new GameManager();
-    const initialInterval = gm.getSpawnInterval();
+    const initialInterval = gm.getSpawnIntervalMs();
 
-    // Advance to 60 seconds (1 min) — multiplier should be 0.7
-    gm.update(60000);
-    const intervalAt1Min = gm.getSpawnInterval();
-    expect(intervalAt1Min).toBeLessThan(initialInterval);
+    // Advance to 30 seconds
+    gm.update(30000);
+    const intervalAt30s = gm.getSpawnIntervalMs();
+    expect(intervalAt30s).toBeLessThan(initialInterval);
 
-    // Advance to 120 seconds (2 min total) — multiplier should be 0.5
-    gm.update(60000);
-    const intervalAt2Min = gm.getSpawnInterval();
-    expect(intervalAt2Min).toBeLessThan(intervalAt1Min);
+    // Advance to 60 seconds total
+    gm.update(30000);
+    const intervalAt60s = gm.getSpawnIntervalMs();
+    expect(intervalAt60s).toBeLessThan(intervalAt30s);
 
-    // Advance to 300 seconds (5 min total) — multiplier should be 0.3
-    gm.update(180000);
-    const intervalAt5Min = gm.getSpawnInterval();
-    expect(intervalAt5Min).toBeLessThan(intervalAt2Min);
+    // Advance to 75 seconds total (panic)
+    gm.update(15000);
+    const intervalAt75s = gm.getSpawnIntervalMs();
+    expect(intervalAt75s).toBeLessThanOrEqual(intervalAt60s);
   });
 
-  // --- Belt speed increases over simulated time (Req 3.3) ---
+  // --- Belt speed increases over simulated time ---
 
-  it('gameManager.getBeltSpeed() increases over simulated time', () => {
+  it('gameManager.getBeltSpeedFactor() increases over simulated time', () => {
     const gm = new GameManager();
-    const initialSpeed = gm.getBeltSpeed();
+    const initialSpeed = gm.getBeltSpeedFactor();
 
-    // Advance to 60 seconds (1 min) — multiplier should be 1.3
-    gm.update(60000);
-    const speedAt1Min = gm.getBeltSpeed();
-    expect(speedAt1Min).toBeGreaterThan(initialSpeed);
+    // Advance to 30 seconds
+    gm.update(30000);
+    const speedAt30s = gm.getBeltSpeedFactor();
+    expect(speedAt30s).toBeGreaterThan(initialSpeed);
 
-    // Advance to 120 seconds (2 min total) — multiplier should be 1.7
-    gm.update(60000);
-    const speedAt2Min = gm.getBeltSpeed();
-    expect(speedAt2Min).toBeGreaterThan(speedAt1Min);
+    // Advance to 60 seconds total
+    gm.update(30000);
+    const speedAt60s = gm.getBeltSpeedFactor();
+    expect(speedAt60s).toBeGreaterThan(speedAt30s);
 
-    // Advance to 300 seconds (5 min total) — multiplier should be 2.5
-    gm.update(180000);
-    const speedAt5Min = gm.getBeltSpeed();
-    expect(speedAt5Min).toBeGreaterThan(speedAt2Min);
+    // Advance to 75 seconds total (panic)
+    gm.update(15000);
+    const speedAt75s = gm.getBeltSpeedFactor();
+    expect(speedAt75s).toBeGreaterThan(speedAt60s);
   });
 
   // --- Backward compatibility: CONVEYOR_SPEED and SPAWN_INTERVAL still exported (Req 6.5) ---

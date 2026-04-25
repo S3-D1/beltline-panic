@@ -6,7 +6,6 @@ import {
   COLLISION_THRESHOLD,
   LOOP_WAYPOINTS,
 } from '../data/ConveyorConfig';
-import { DELIVERY_CONFIG } from '../data/DeliveryConfig';
 import { ConveyorSystem, ConveyorItem } from './ConveyorSystem';
 import { GameManager } from '../systems/GameManager';
 import { distance } from './SafeReleaseSystem';
@@ -42,14 +41,14 @@ const INLET_INSECURE_DISTANCE = GATE_OFFSET_PX + 2.25 * ITEM_SIZE;
 export class ItemSystem {
   private items: ConveyorItem[] = [];
   private spawnTimer = 0;
-  private nextDelay: number = DELIVERY_CONFIG.initialSpawnInterval;
+  private nextDelay: number = 1450; // matches DEFAULT_GAME_BALANCE_CONFIG.spawns.startIntervalMs
   private rng: () => number;
 
   constructor(private conveyor: ConveyorSystem, seed?: number) {
     this.rng = createSeededRandom(seed ?? Date.now());
   }
 
-  update(delta: number, gameManager: GameManager): UpdateResult {
+  update(delta: number, gameManager: GameManager, beltSpeed: number): UpdateResult {
     // 1. Tick spawn timer and spawn new items (with inlet overflow detection — Task 9.3)
     this.spawnTimer += delta;
     let spawnCollision: { a: ConveyorItem; b: ConveyorItem } | null = null;
@@ -88,11 +87,8 @@ export class ItemSystem {
       }
       this.spawnTimer -= this.nextDelay;
 
-      // Compute next jittered spawn delay
-      const interval = gameManager.getSpawnInterval();
-      const jitter = gameManager.getSpawnJitter();
-      this.nextDelay = interval + interval * jitter * (2 * this.rng() - 1);
-      this.nextDelay = Math.max(this.nextDelay, DELIVERY_CONFIG.minSpawnDelay);
+      // Compute next spawn delay from GameManager (adaptive difficulty)
+      this.nextDelay = gameManager.getNextSpawnDelayMs();
     }
 
     // 2a. Inlet-to-belt gating — clamp leading inlet item at junction BEFORE conveyor advances
@@ -123,7 +119,7 @@ export class ItemSystem {
     }
 
     // 2b. Advance positions via ConveyorSystem
-    this.conveyor.update(delta, this.items, gameManager.getBeltSpeed());
+    this.conveyor.update(delta, this.items, beltSpeed);
 
     // 2c. Inlet-to-belt gating — after advance, only allow ONE item to transition per frame.
     // If multiple items transitioned (due to high delta or clustering), revert all but the first.
